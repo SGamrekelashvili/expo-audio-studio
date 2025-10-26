@@ -48,6 +48,35 @@
 npm install expo-audio-studio
 ```
 
+### Configuration (Automatic)
+
+The config plugin automatically configures the required permissions. Just add it to your `app.config.ts`:
+
+```typescript
+export default {
+  plugins: [
+    [
+      'expo-audio-studio',
+      {
+        microphonePermission: 'Allow $(PRODUCT_NAME) to access your microphone for audio recording'
+      }
+    ]
+  ]
+};
+```
+
+Or use it without options for default permissions:
+
+```typescript
+export default {
+  plugins: ['expo-audio-studio']
+};
+```
+
+The plugin automatically adds:
+- **iOS**: `NSMicrophoneUsageDescription` to Info.plist
+- **Android**: `RECORD_AUDIO` and `MODIFY_AUDIO_SETTINGS` permissions
+
 ### Development Build
 
 This library requires a
@@ -55,6 +84,9 @@ This library requires a
 as it includes native code.
 
 ```bash
+# Prebuild to apply the plugin
+npx expo prebuild
+
 # Create development build
 npx expo run:ios
 npx expo run:android
