@@ -1,8 +1,9 @@
 # Contributing to Expo Audio Studio
 
-Thank you for your interest in contributing to Expo Audio Studio! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to Expo Audio Studio! This document
+provides guidelines and information for contributors.
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -14,12 +15,14 @@ Thank you for your interest in contributing to Expo Audio Studio! This document 
 ### Development Setup
 
 1. **Fork and Clone**
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/expo-audio-studio.git
    cd expo-audio-studio
    ```
 
 2. **Install Dependencies**
+
    ```bash
    npm install
    ```
@@ -33,7 +36,7 @@ Thank you for your interest in contributing to Expo Audio Studio! This document 
    npx expo run:android
    ```
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 expo-audio-studio/
@@ -48,7 +51,7 @@ expo-audio-studio/
 │   └── SoundClassification/      # VAD implementation
 ├── android/                      # Android native implementation
 │   └── src/main/java/expo/modules/audiostudio/
-│       ├── ExpoAudioHandlerModule.kt
+│       ├── ExpoAudioStudioModule.kt
 │       ├── recorder/             # Recording components
 │       ├── player/               # Playback components
 │       └── AudioAmplitudeAnalyzer.kt
@@ -56,11 +59,12 @@ expo-audio-studio/
 └── docs/                         # Additional documentation
 ```
 
-## 🛠️ Development Workflow
+## Development Workflow
 
 ### Making Changes
 
 1. **Create a Feature Branch**
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
@@ -71,10 +75,11 @@ expo-audio-studio/
    - Update documentation as needed
 
 3. **Test Your Changes**
+
    ```bash
    # Run TypeScript checks
    npm run build
-   
+
    # Test in example app
    cd example
    npx expo run:ios
@@ -82,6 +87,7 @@ expo-audio-studio/
    ```
 
 4. **Commit and Push**
+
    ```bash
    git add .
    git commit -m "feat: add amazing new feature"
@@ -96,7 +102,8 @@ expo-audio-studio/
 ### Code Style
 
 - **TypeScript**: Use strict typing, avoid `any`
-- **Native Code**: Follow platform conventions (Swift for iOS, Kotlin for Android)
+- **Native Code**: Follow platform conventions (Swift for iOS, Kotlin for
+  Android)
 - **Naming**: Use descriptive names, follow existing patterns
 - **Comments**: Document complex logic and public APIs
 
@@ -113,13 +120,14 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 - `chore:` - Build process or auxiliary tool changes
 
 Examples:
+
 ```
 feat: add voice activity detection threshold configuration
 fix: resolve iOS recording permission issue
 docs: update API documentation for new VAD features
 ```
 
-## 🧪 Testing
+## Testing
 
 ### Manual Testing
 
@@ -153,7 +161,7 @@ npm run lint
 npm run type-check
 ```
 
-## 📝 Documentation
+## Documentation
 
 ### API Documentation
 
@@ -175,16 +183,19 @@ Update `CHANGELOG.md` with your changes:
 ## [Unreleased]
 
 ### Added
+
 - New voice activity detection threshold configuration
 
 ### Fixed
+
 - iOS recording permission issue
 
 ### Changed
+
 - Improved error handling in playback functions
 ```
 
-## 🐛 Bug Reports
+## Bug Reports
 
 When reporting bugs, please include:
 
@@ -203,7 +214,7 @@ When reporting bugs, please include:
    - Minimal reproducible example
    - Relevant configuration
 
-## 💡 Feature Requests
+## Feature Requests
 
 For new features:
 
@@ -212,7 +223,7 @@ For new features:
 3. **Propose Implementation** - How should it work?
 4. **Consider Alternatives** - Are there other solutions?
 
-## 🔄 Release Process
+## Release Process
 
 ### Version Bumping
 
@@ -231,7 +242,7 @@ We follow [Semantic Versioning](https://semver.org/):
 - [ ] Create GitHub release
 - [ ] Publish to npm
 
-## 🤝 Community Guidelines
+## Community Guidelines
 
 ### Code of Conduct
 
@@ -242,11 +253,13 @@ We follow [Semantic Versioning](https://semver.org/):
 
 ### Getting Help
 
-- 💬 [GitHub Discussions](https://github.com/sgamrekelashvili/expo-audio-studio/discussions) - General questions
-- 🐛 [GitHub Issues](https://github.com/sgamrekelashvili/expo-audio-studio/issues) - Bug reports
-- 📧 [Email](mailto:sgamrekelashvili@gmail.com) - Direct contact
+- [GitHub Discussions](https://github.com/sgamrekelashvili/expo-audio-studio/discussions) -
+  General questions
+- [GitHub Issues](https://github.com/sgamrekelashvili/expo-audio-studio/issues) -
+  Bug reports
+- [Email](mailto:sgamrekelashvili@gmail.com) - Direct contact
 
-## 🏆 Recognition
+## Recognition
 
 Contributors will be:
 
@@ -255,7 +268,7 @@ Contributors will be:
 - Given credit in commit messages
 - Invited to join the maintainers team (for significant contributions)
 
-## 📚 Resources
+## Resources
 
 - [Expo Modules API](https://docs.expo.dev/modules/overview/)
 - [React Native Documentation](https://reactnative.dev/docs/getting-started)
@@ -264,4 +277,5 @@ Contributors will be:
 
 ---
 
-Thank you for contributing to Expo Audio Studio! Your efforts help make audio development easier for the entire React Native community. 🎉
+Thank you for contributing to Expo Audio Studio! Your efforts help make audio
+development easier for the entire React Native community.

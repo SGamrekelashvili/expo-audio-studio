@@ -1,10 +1,3 @@
-//
-//  AudioManager.swift
-//  Pods
-//
-//  Created by Sandro Gamrekelashvili on 20.05.25.
-//
-
 import Foundation
 import AVFoundation
 

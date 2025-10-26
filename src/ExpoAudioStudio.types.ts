@@ -1,12 +1,4 @@
-/**
- * @fileoverview TypeScript definitions for Expo Audio Handler module
- * @version 2.0.7
- * @author Sandro Gamrekelashvili <sgamrekelashvili@gmail.com>
- */
-
-// ============================================================================
-// AUDIO SESSION TYPES
-// ============================================================================
+// Audio Session Types
 
 /**
  * Audio session category for iOS
@@ -62,9 +54,7 @@ export type AudioSessionConfig = {
   options?: AudioSessionOptions;
 };
 
-// ============================================================================
-// EVENT TYPES
-// ============================================================================
+// Event Types
 
 /**
  * Event payload for module initialization
@@ -173,9 +163,7 @@ export type VoiceActivityEvent = {
   };
 };
 
-// ============================================================================
-// PERMISSION TYPES
-// ============================================================================
+// Permission Types
 
 /**
  * Permission status enumeration
@@ -198,9 +186,7 @@ export type PermissionResponse = {
   granted: boolean;
 };
 
-// ============================================================================
-// PLAYBACK TYPES
-// ============================================================================
+// Playback Types
 
 /**
  * Detailed player status information
@@ -221,9 +207,7 @@ export type PlayerStatusResult = {
  */
 export type PlaybackSpeed = number;
 
-// ============================================================================
-// RECORDING TYPES
-// ============================================================================
+// Recording Types
 
 /**
  * Recording configuration options
@@ -257,9 +241,7 @@ export type RecordingState = {
   duration: number;
 };
 
-// ============================================================================
-// VOICE ACTIVITY DETECTION TYPES
-// ============================================================================
+// Voice Activity Detection Types
 
 /**
  * VAD sensitivity levels for easy configuration
@@ -394,9 +376,7 @@ export type VADInitResult = {
   };
 };
 
-// ============================================================================
-// AUDIO AMPLITUDE TYPES
-// ============================================================================
+// Audio Amplitude Types
 
 /**
  * Audio amplitude analysis result
@@ -416,9 +396,7 @@ export type AudioAmplitudeResult = {
   error?: string;
 };
 
-// ============================================================================
-// FUNCTION RETURN TYPES
-// ============================================================================
+// Function Return Types
 
 /**
  * Standard function result for operations that can succeed or fail
@@ -442,9 +420,7 @@ export type FilePathResult = string | null;
  */
 export type DurationResult = number;
 
-// ============================================================================
-// ERROR TYPES
-// ============================================================================
+// Error Types
 
 /**
  * Audio handler error types

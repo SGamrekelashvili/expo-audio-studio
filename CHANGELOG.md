@@ -38,18 +38,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2025-10-25
 
 ### Added
-- 🎙️ **High-Quality Recording** - WAV format on both iOS and Android platforms
-- 🎵 **Advanced Playback** - Speed control, seeking, pause/resume functionality
-- 🧠 **Voice Activity Detection** - Real-time speech detection with confidence scoring
+- **High-Quality Recording** - WAV format on both iOS and Android platforms
+- **Playback Controls** - Speed control, seeking, pause/resume functionality
+- **Voice Activity Detection** - Real-time speech detection with confidence scoring
   - iOS: Core ML-based Sound Classification
   - Android: Silero VAD (Deep Neural Network-based)
-- 📊 **Audio Analysis** - Amplitude monitoring, duration calculation, waveform data
-- 📁 **File Management** - List, join, and organize audio files
-- 🔄 **Cross-Platform** - Identical API on iOS and Android
-- ⚡ **Performance Optimized** - Native implementations for smooth operation
-- 🛡️ **Type Safe** - Full TypeScript support with comprehensive types
-- 📱 **iOS Audio Session Management** - Configurable audio session with category, mode, and options
-- 🎯 **Production Ready** - Tested in large-scale applications
+- **Audio Analysis** - Amplitude monitoring, duration calculation, waveform data
+- **File Management** - List, join, and organize audio files
+- **Cross-Platform** - Identical API on iOS and Android
+- **Performance Optimized** - Native implementations for smooth operation
+- **Type Safe** - Full TypeScript support with comprehensive types
+- **iOS Audio Session Management** - Configurable audio session with category, mode, and options
+- **Production Ready** - Tested in large-scale applications
 
 ### Features
 - Recording with pause/resume functionality

@@ -40,15 +40,12 @@ enum AudioSessionError: Error, LocalizedError {
 }
 
 public class ExpoAudioStudioModule: Module {
-    // Audio manager instances (assuming these classes are defined elsewhere)
     private let audioManager = AudioManager()
     private let recorderManager = RecorderManager()
     
-    // MEMORY FIX: Sound classification manager for voice activity detection - lazy loaded
     @available(iOS 13.0, *)
     private var soundClassificationManager: EnhancedSoundClassificationManager?
     
-    // VAD OPTIMIZATION: Track if VAD is enabled from JavaScript
     private var isVADEnabledFromJS: Bool = false
     
     // Flags to remember if we were playing/recording before an interruption
@@ -58,7 +55,6 @@ public class ExpoAudioStudioModule: Module {
     
     
     
-    // MEMORY FIX: Lazy getter for sound classification manager
     @available(iOS 13.0, *)
     private func getSoundClassificationManager() -> EnhancedSoundClassificationManager {
         if soundClassificationManager == nil {
@@ -67,18 +63,15 @@ public class ExpoAudioStudioModule: Module {
         return soundClassificationManager!
     }
     
-    // VAD OPTIMIZATION: Helper to check if VAD should be active
     private func shouldVADBeActive() -> Bool {
         let isRecording = recorderManager.getRecorder()?.isRecording ?? false
         return isRecording && isVADEnabledFromJS
     }
 
-    // Helper function to get directory for storing audio files (delegated to RecorderManager)
     private func getFileCacheLocation() -> URL {
         return recorderManager.getFileCacheLocation()
     }
 
-    // Helper function to send player status events to JavaScript
     func sendPlayerStatusEvent(isPlaying: Bool, didJustFinish: Bool) {
         print("[\(Date())] sendPlayerStatusEvent: isPlaying=\(isPlaying), didJustFinish=\(didJustFinish)")
         sendEvent("onPlayerStatusChange", [
@@ -87,7 +80,6 @@ public class ExpoAudioStudioModule: Module {
         ])
     }
 
-    // Helper function to send recorder status events to JavaScript
     func sendRecorderStatusEvent(status: String) {
         print("[\(Date())] sendRecorderStatusEvent: status=\(status)")
         sendEvent("onRecorderStatusChange", [
@@ -95,15 +87,12 @@ public class ExpoAudioStudioModule: Module {
         ])
     }
 
-    // Helper function to send amplitude events to JavaScript (logging is commented to avoid verbosity)
     private func sendAmplitudeEvent(amplitude: Float) {
-        // print("[\(Date())] sendAmplitudeEvent: amplitude=\(amplitude)") // Avoid excessive logging
         sendEvent("onRecorderAmplitude", [
             "amplitude": amplitude
         ])
     }
     
-    // Helper function to send voice activity events to JavaScript
     private func sendVoiceActivityEvent(isVoiceDetected: Bool, confidence: Float) {
         print("[\(Date())] sendVoiceActivityEvent: isVoiceDetected=\(isVoiceDetected), confidence=\(confidence)")
         sendEvent("onVoiceActivityDetected", [
@@ -113,11 +102,6 @@ public class ExpoAudioStudioModule: Module {
         ])
     }
 
-    // MARK: - Setup and Teardown Observers
-
-    /**
-     Sets up notification observers for audio session interruptions and route changes.
-     */
     private func setupNotificationObservers() {
         print("[\(Date())] Setting up notification observers...")
         

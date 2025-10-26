@@ -1,10 +1,3 @@
-//
-//  EnhancedSoundClassificationManager.swift
-//  ExpoAudioStudio
-//
-//  Clean standalone-only VAD implementation
-//
-
 import Foundation
 import AVFoundation
 import SoundAnalysis
@@ -12,7 +5,6 @@ import SoundAnalysis
 @available(iOS 13.0, *)
 class EnhancedSoundClassificationManager: NSObject {
     
-    // MARK: - Properties
     private var audioEngine: AVAudioEngine?
     private var streamAnalyzer: SNAudioStreamAnalyzer?
     private var soundClassifier: SNClassifySoundRequest?
@@ -31,8 +23,6 @@ class EnhancedSoundClassificationManager: NSObject {
         "human_voice", "male_speech", "female_speech", "child_speech",
         "speech_synthesizer", "voice", "talk", "speaking"
     ]
-    
-    // MARK: - Public Methods
     
     func startVoiceActivityDetection(callback: @escaping (Bool, Float) -> Void) -> String {
         guard !isAnalyzing else {

@@ -1,9 +1,3 @@
-/**
- * @fileoverview Native module interface for Expo Audio Handler
- * @version 2.0.5
- * @author Sandro Gamrekelashvili <sgamrekelashvili@gmail.com>
- */
-
 import { NativeModule, requireNativeModule } from 'expo';
 
 import type {
@@ -14,24 +8,8 @@ import type {
   PermissionResponse,
 } from './ExpoAudioStudio.types';
 
-/**
- * Native module interface for audio recording and playback functionality
- *
- * @example
- * ```typescript
- * import ExpoAudioStudio from 'expo-audio-handler';
- *
- * // Start recording
- * const result = ExpoAudioStudio.startRecording();
- *
- * // Start playback
- * const playResult = ExpoAudioStudio.startPlaying('/path/to/audio.wav');
- * ```
- */
 declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEvents> {
-  // ============================================================================
-  // RECORDING METHODS
-  // ============================================================================
+  // Recording Methods
 
   /**
    * Starts audio recording with optional custom directory
@@ -111,9 +89,7 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    */
   lastRecording(): string;
 
-  // ============================================================================
-  // FILE MANAGEMENT METHODS
-  // ============================================================================
+  // File Management
 
   /**
    * Lists all audio recordings in a directory
@@ -165,9 +141,7 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
   joinAudioFiles(_filePaths: string[], _outputPath: string): string;
   setAmplitudeUpdateFrequency(_frequencyHz: number): string;
 
-  // ============================================================================
-  // PLAYBACK METHODS
-  // ============================================================================
+  // Playback Methods
 
   /**
    * Prepares audio player without starting playback
@@ -272,9 +246,7 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    */
   seekTo(_position: number): string;
 
-  // ============================================================================
-  // AUDIO INFORMATION PROPERTIES
-  // ============================================================================
+  // Audio Properties
 
   /**
    * Current playback position in seconds
@@ -347,9 +319,7 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    */
   readonly isPaused: boolean;
 
-  // ============================================================================
-  // UTILITY METHODS
-  // ============================================================================
+  // Utility Methods
 
   /**
    * Gets the duration of an audio file
@@ -386,9 +356,7 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    */
   getAudioAmplitudes(_fileUrl: string, _barsCount: number): AudioAmplitudeResult;
 
-  // ============================================================================
-  // VOICE ACTIVITY DETECTION METHODS
-  // ============================================================================
+  // Voice Activity Detection
 
   /**
    * Starts Voice Activity Detection (requires active recording)
@@ -451,9 +419,7 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    */
   setVoiceActivityThreshold(_threshold: number): string;
 
-  // ============================================================================
-  // PERMISSION METHODS
-  // ============================================================================
+  // Permissions
 
   /**
    * Requests microphone permission from the user
@@ -486,9 +452,7 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    */
   getMicrophonePermissionStatus(): Promise<PermissionResponse>;
 
-  // ============================================================================
-  // AUDIO SESSION METHODS
-  // ============================================================================
+  // Audio Session
 
   /**
    * Configures the audio session with specified category, mode, and options

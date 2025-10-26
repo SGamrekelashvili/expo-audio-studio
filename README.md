@@ -1,6 +1,6 @@
 <div align="center">
-  <h1>🎙️ Expo Audio Studio</h1>
-  <p><strong>Professional Audio Recording, Playback & Voice Activity Detection for Expo</strong></p>
+  <h1>Expo Audio Studio</h1>
+  <p><strong>Audio recording and playback for Expo apps with built-in voice detection</strong></p>
   
   <p>
     <a href="https://www.npmjs.com/package/expo-audio-studio">
@@ -20,37 +20,33 @@
 
 ---
 
-## 🎬 Demo
+## Demo
 
 <div align="center">
   <img src="https://github.com/SGamrekelashvili/expo-audio-studio/blob/main/example.gif" alt="Expo Audio Studio Demo" width="600" />
   <p><em>Voice Activity Detection Example</em></p>
 </div>
 
-## ✨ Features
+## What's included
 
-- 🎙️ **High-Quality Recording** - WAV format on both platforms, multi-format
-  support coming soon
-- 🎵 **Advanced Playback** - Speed control, seeking, pause/resume
-- 🧠 **Voice Activity Detection** - Real-time speech detection with confidence
-  scoring
-- 📊 **Audio Analysis** - Amplitude monitoring, duration calculation, waveform
-  data
-- 📁 **File Management** - List, join, and organize audio files
-- 🔄 **Cross-Platform** - Identical API on iOS, Android, and Web (coming soon)
-- ⚡ **Performance Optimized** - Native implementations for smooth operation
-- 🛡️ **Type Safe** - Full TypeScript support with comprehensive types
-- 🎯 **Production Ready** - Used in large scale application
+- Record high-quality audio (WAV/PCM16 format, 16kHz, 16-bit mono)
+- Play audio with speed control and seeking
+- Detect when someone is speaking (voice activity detection)
+- Get real-time amplitude data and waveform visualizations
+- Join multiple audio files together
+- Works the same on iOS and Android
+- Full TypeScript support
 
-## 📦 Installation
+## Installation
 
 ```bash
 npm install expo-audio-studio
 ```
 
-### Configuration (Automatic)
+### Setup permissions
 
-The config plugin automatically configures the required permissions. Just add it to your `app.config.ts`:
+Add the plugin to your `app.config.ts` to automatically configure microphone
+permissions:
 
 ```typescript
 export default {
@@ -58,10 +54,11 @@ export default {
     [
       'expo-audio-studio',
       {
-        microphonePermission: 'Allow $(PRODUCT_NAME) to access your microphone for audio recording'
-      }
-    ]
-  ]
+        microphonePermission:
+          'Allow $(PRODUCT_NAME) to access your microphone for audio recording',
+      },
+    ],
+  ],
 };
 ```
 
@@ -69,19 +66,19 @@ Or use it without options for default permissions:
 
 ```typescript
 export default {
-  plugins: ['expo-audio-studio']
+  plugins: ['expo-audio-studio'],
 };
 ```
 
-The plugin automatically adds:
-- **iOS**: `NSMicrophoneUsageDescription` to Info.plist
-- **Android**: `RECORD_AUDIO` and `MODIFY_AUDIO_SETTINGS` permissions
+This adds:
 
-### Development Build
+- iOS: Microphone usage description
+- Android: Audio recording permissions
 
-This library requires a
-[development build](https://docs.expo.dev/develop/development-builds/introduction/)
-as it includes native code.
+### Build your app
+
+Since this uses native code, you'll need a
+[development build](https://docs.expo.dev/develop/development-builds/introduction/):
 
 ```bash
 # Prebuild to apply the plugin
@@ -92,9 +89,9 @@ npx expo run:ios
 npx expo run:android
 ```
 
-## 🚀 Quick Start
+## Getting started
 
-### Basic Recording
+### Record audio
 
 ```typescript
 import {
@@ -128,7 +125,7 @@ console.log('Recording saved to:', finalPath);
 subscription.remove();
 ```
 
-### Voice Activity Detection
+### Detect speech
 
 ```typescript
 import {
@@ -150,7 +147,7 @@ const vadSubscription = addVoiceActivityListener(event => {
 startRecording();
 ```
 
-### Audio Playback
+### Play audio
 
 ```typescript
 import {
@@ -174,17 +171,17 @@ setPlaybackSpeed('1.5'); // 1.5x speed
 playerSubscription.remove();
 ```
 
-## 📚 API Reference
+## API Reference
 
 ### Recording Functions
 
 | Function                         | Description             | Returns                    |
-| -------------------------------- | ----------------------- | -------------------------- |
+| -------------------------------- | ----------------------- | -------------------------- | ----- |
 | `startRecording(directoryPath?)` | Start audio recording   | `string` - File path       |
 | `stopRecording()`                | Stop recording          | `string` - Final file path |
 | `pauseRecording()`               | Pause recording         | `string` - Status message  |
 | `resumeRecording()`              | Resume recording        | `string` - Status message  |
-| `lastRecording()`                | Get last recording path | `string \| null`           |
+| `lastRecording()`                | Get last recording path | `string                    | null` |
 
 ### Playback Functions
 
@@ -276,81 +273,61 @@ addPlayerStatusListener((event: PlayerStatusChangeEvent) => {
 });
 ```
 
-## 🎯 Advanced Usage
+## More examples
 
-### Custom Recording Directory
+### Save to a custom folder
 
 ```typescript
-// Record to custom directory
-const customPath = '/path/to/custom/directory';
-const filePath = startRecording(customPath);
+const filePath = startRecording('/path/to/custom/directory');
 ```
 
-### Audio Session Configuration (iOS)
+### iOS audio session setup
 
-> [!IMPORTANT]  
-> You can call `configureAudioSession()` again after `activateAudioSession()` to
-> change options (e.g. switching between playback and recording).  
-> However, **do not reconfigure the session while recording or playing audio** —
-> this may cause the app to **freeze** on iOS.
+> **Note:** Don't reconfigure the audio session while recording or playing -
+> this can freeze your app.
 
 ```typescript
 import { configureAudioSession, activateAudioSession } from 'expo-audio-studio';
 
-// Configure for recording
 await configureAudioSession({
   category: 'playAndRecord',
   mode: 'default',
   options: {
     defaultToSpeaker: true,
     allowBluetooth: true,
-    allowBluetoothA2DP: true,
   },
 });
 
-// Activate session
 await activateAudioSession();
 ```
 
-> [!IMPORTANT]  
-> You can call `configureAudioSession()` again after `activateAudioSession()` to
-> change options (e.g. switching between playback and recording).  
-> However, **do not reconfigure the session while recording or playing audio** —
-> this may cause the app to **freeze** on iOS.
-
-### Voice Activity Detection with Custom Threshold
+### Adjust voice detection sensitivity
 
 ```typescript
-// Set sensitive threshold for quiet environments
+// More sensitive (for quiet rooms)
 setVoiceActivityThreshold(0.3);
 
-// Set less sensitive threshold for noisy environments
+// Less sensitive (for noisy places)
 setVoiceActivityThreshold(0.7);
 
-// Enable VAD
 setVADEnabled(true);
 ```
 
-### Audio File Analysis
+### Get waveform data
 
 ```typescript
-// Get detailed waveform data (dB values)
 const waveformData = getAudioAmplitudes('/path/to/file.wav', 100);
-console.log('Waveform bars (dB):', waveformData.amplitudes);
-console.log('Duration:', waveformData.duration);
+console.log('Amplitude values:', waveformData.amplitudes);
 
-// Convert dB to normalized values for visualization
-const normalizedAmplitudes = waveformData.amplitudes.map(dB => {
-  // Convert dB to 0-1 range (assuming -60dB to 0dB range)
-  return Math.max(0, (dB + 60) / 60);
-});
+// Normalize for UI visualization (dB to 0-1 range)
+const normalized = waveformData.amplitudes.map(dB =>
+  Math.max(0, (dB + 60) / 60)
+);
 
-// Get file duration
 const duration = getDuration('/path/to/file.wav');
-console.log('Duration:', duration, 'seconds');
 ```
 
-### Joining Audio Files
+### Merge audio files
 
 ```typescript
 const inputFiles = [
@@ -364,76 +341,57 @@ const result = joinAudioFiles(inputFiles, outputPath);
 console.log('Joined file created:', result);
 ```
 
-## 🔧 Configuration
+## Audio format
 
-### Audio Formats
+Recordings use WAV format (PCM16, 16kHz, 16-bit mono) on both platforms. This
+provides good quality while keeping file sizes reasonable.
 
-**Current Implementation:**
-
-- **iOS**: WAV (Linear PCM, 16kHz, 16-bit, mono) - High-quality format
-- **Android**: WAV (PCM, 16kHz, 16-bit, mono) - High-quality format using
+- iOS: Linear PCM using AVFoundation
+- Android: PCM using
   [AndroidWaveRecorder](https://github.com/squti/Android-Wave-Recorder)
 
-**Note**: Both platforms currently use WAV format for optimal quality
-compatibility. Multi-format recording support is planned for iOS to provide
-format options when needed.
+We're planning to add more format options in the future.
 
-### Voice Activity Detection
+## Voice detection details
 
-**Platform Implementations:**
+**iOS** uses Apple's Core ML Sound Classification:
 
-- **iOS**: Core ML Sound Classification (requires iOS 13.0+)
-  - Continuous event stream (~1.5 second analysis window with 90% overlap)
-  - Real-time confidence scoring (0.0-1.0)
-  - Events sent continuously during analysis
-- **Android**: [Silero VAD](https://github.com/gkonovalov/android-vad) (Deep
-  Neural Network-based)
-  - State-change events only (voice detected / silence detected)
-  - Frame Size: 512 samples (32ms) at 16kHz
-  - Fixed confidence values (0.85 for voice, 0.15 for silence)
-  - Optimized for efficiency - only fires on state transitions
+- Sends events continuously (~60-100ms intervals)
+- Provides real confidence scores (0.0-1.0)
+- Analyzes 1.5 second windows with 90% overlap
 
-**Event Behavior:**
+**Android** uses [Silero VAD](https://github.com/gkonovalov/android-vad):
 
-- **iOS**: Receives events continuously during VAD operation (~60-100ms
-  intervals)
-- **Android**: Receives events only when voice activity state changes
-- **Confidence**: iOS provides real ML confidence scores; Android uses fixed
-  values
+- Only sends events when voice starts/stops
+- Uses fixed confidence values (0.85 for voice, 0.15 for silence)
+- Analyzes 32ms frames at 16kHz
 
 **Configuration:**
 
-- **Detection Threshold**: 0.0-1.0 range (iOS only - affects ML classification
-  threshold)
-- **Silence Duration**: 300ms (Android)
-- **Speech Duration**: 50ms (Android)
+- iOS: Adjustable detection threshold (0.0-1.0)
+- Android: 300ms silence duration, 50ms speech duration
 
-## 📱 Platform Support
+## Platform requirements
 
-| Platform | Minimum Version | Notes                                        |
-| -------- | --------------- | -------------------------------------------- |
-| iOS      | 13.0+           | Core ML required for VAD                     |
-| Android  | API 21+ (5.0)   | Full feature support                         |
-| Web      | Coming Soon 🚀  | In development - full feature parity planned |
+- **iOS**: 13.0 or higher (for voice detection)
+- **Android**: API 21 (Android 5.0) or higher
+- **Web**: Coming soon
 
-## 📦 Dependencies
+## What's under the hood
 
-### Android Native Dependencies
+**Android libraries:**
 
-| Library                                                               | Version | License | Purpose                    |
-| --------------------------------------------------------------------- | ------- | ------- | -------------------------- |
-| [AndroidWaveRecorder](https://github.com/squti/Android-Wave-Recorder) | 2.1.0   | MIT     | High-quality WAV recording |
-| [Silero VAD](https://github.com/gkonovalov/android-vad)               | 2.0.10  | MIT     | Voice Activity Detection   |
+- [AndroidWaveRecorder](https://github.com/squti/Android-Wave-Recorder)
+  (v2.1.0) - for WAV recording
+- [Silero VAD](https://github.com/gkonovalov/android-vad) (v2.0.10) - for voice
+  detection
 
-### iOS Native Dependencies
+**iOS frameworks:**
 
-- **Core ML** - Built-in Apple framework for Voice Activity Detection
-- **AVFoundation** - Built-in Apple framework for audio recording/playback
+- AVFoundation - for recording/playback
+- Core ML - for voice detection
 
-**License Compatibility**: All dependencies use MIT License, making this package
-safe for commercial and open-source use.
-
-## 🛠️ Development
+Everything is MIT licensed.
 
 ### Running the Example
 
@@ -459,52 +417,54 @@ npm run build
 npm test
 ```
 
-## 🗺️ Roadmap
+## What's next
 
-### 🚀 Coming Soon
+**Streaming & Real-time Processing**
 
-- **🌐 Web Platform Support** - Full feature parity with iOS and Android
-  - WebRTC-based recording and playback
-  - Browser-native Voice Activity Detection
-  - File management with Web APIs
-  - Same TypeScript API across all platforms
+- Stream audio chunks in real-time (configurable chunk sizes) - **mostly
+  requested feature**
+- Access raw PCM16 data during recording - **mostly requested feature**
+- Lower latency for live transcription and analysis - **mostly requested
+  feature**
+- Useful for speech-to-text and real-time processing - **mostly requested
+  feature**
 
-- **🎵 Multi-Format Recording** - Configurable audio formats (iOS priority)
-  - WAV, M4A, MP3, FLAC support
-  - Quality and compression settings
-  - Format selection per recording session
-  - Both platforms currently use WAV (excellent format), additional formats for
-    specific use cases
+**More formats**
 
-- **📊 Enhanced Analytics** - Advanced audio analysis features
-- **🎙️ Multi-channel Recording** - Stereo and multi-microphone support
-- **🎵 Audio Effects** - Real-time audio processing and filters
+- M4A, MP3, FLAC recording options
+- Configurable quality settings
 
-### 💬 Feedback Welcome
+**Web support**
 
-Have ideas for new features?
-[Open a discussion](https://github.com/sgamrekelashvili/expo-audio-studio/discussions)
-and let us know!
+- WebRTC-based recording
+- Browser voice detection
+- Same API across all platforms
 
-## 🤝 Contributing
+**Other features**
 
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
-for details on our code of conduct and the process for submitting pull requests.
+- Stereo and multi-channel recording
+- Real-time audio effects
+- Advanced analytics
 
-### Development Setup
+Got ideas?
+[Open a discussion](https://github.com/sgamrekelashvili/expo-audio-studio/discussions)!
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Contributing
 
-## 📄 License
+Pull requests are welcome! Check out the [Contributing Guide](CONTRIBUTING.md)
+for details.
+
+1. Fork the repo
+2. Create a branch: `git checkout -b feature/my-feature`
+3. Make your changes
+4. Push and open a pull request
+
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Built with [Expo Modules API](https://docs.expo.dev/modules/overview/)
 - Android WAV recording powered by
@@ -513,14 +473,14 @@ for details.
 - Android Voice Activity Detection powered by
   [Silero VAD](https://github.com/gkonovalov/android-vad) by @gkonovalov
 - iOS Voice Activity Detection using Apple's Core ML Sound Classification
-- Inspired by the need
+- Built for production use in audio applications
 
-## 📞 Support
+## Support
 
-- 📧 Email: [sgamrekelashvili@gmail.com](mailto:sgamrekelashvili@gmail.com)
-- 🐛 Issues:
+- Email: [sgamrekelashvili@gmail.com](mailto:sgamrekelashvili@gmail.com)
+- Issues:
   [GitHub Issues](https://github.com/sgamrekelashvili/expo-audio-studio/issues)
-- 💬 Discussions:
+- Discussions:
   [GitHub Discussions](https://github.com/sgamrekelashvili/expo-audio-studio/discussions)
 
 ---

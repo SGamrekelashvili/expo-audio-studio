@@ -20,18 +20,10 @@ import {
   resumeRecording,
   startPlaying,
   stopPlaying,
-  pausePlayer,
-  resumePlayer,
-  setPlaybackSpeed,
   seekTo,
   getDuration,
   setVADEnabled,
   setVoiceActivityThreshold,
-  isVADActive,
-  isVADEnabled,
-  isPaused,
-  meterLevel,
-  currentPosition,
   addRecorderStatusListener,
   addRecorderAmplitudeListener,
   addVoiceActivityListener,
@@ -60,42 +52,28 @@ const colors = {
   accent: '#EC4899',
 };
 
-export default function AppImproved() {
-  // Permission state
+export default function App() {
   const [hasPermission, setHasPermission] = useState<boolean>(false);
-
-  // Recording states
   const [isRecording, setIsRecording] = useState(false);
   const [recordingPaused, setRecordingPaused] = useState(false);
   const [recordingPath, setRecordingPath] = useState<string>('');
   const [amplitude, setAmplitude] = useState<number>(-160);
-
-  // Playback states
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackSpeed, setPlaybackSpeedState] = useState(1.0);
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
-
-  // VAD states
   const [vadEnabled, setVadEnabledState] = useState(false);
   const [vadActive, setVadActiveState] = useState(false);
   const [voiceDetected, setVoiceDetected] = useState(false);
   const [voiceConfidence, setVoiceConfidence] = useState(0);
   const [vadThreshold, setVadThreshold] = useState<number>(0.5);
-
-  // UI state
   const [activeTab, setActiveTab] = useState<'record' | 'vad'>('record');
   const [pulseAnim] = useState(new Animated.Value(1));
 
-  // Request microphone permission
   useEffect(() => {
     const requestPermission = async () => {
       try {
         const result = await requestMicrophonePermission();
         setHasPermission(result.granted);
-        if (!result.granted) {
-          Alert.alert('Permission Required', 'Microphone permission is required for recording.');
-        }
       } catch (error) {
         console.error('Permission error:', error);
         Alert.alert('Error', 'Failed to request microphone permission');
@@ -104,79 +82,37 @@ export default function AppImproved() {
     requestPermission();
   }, []);
 
-  // Setup event listeners
   useEffect(() => {
-    console.log('🎧 Setting up audio event listeners...');
+    const statusSubscription = addRecorderStatusListener((event: AudioRecordingStateChangeEvent) => {
+      setIsRecording(event.status === 'recording');
+      setRecordingPaused(event.status === 'paused');
 
-    const statusSubscription = addRecorderStatusListener(
-      (event: AudioRecordingStateChangeEvent) => {
-        console.log('📊 Recording Status Changed:', event.status);
-
-        // Update states based on status
-        const newIsRecording = event.status === 'recording';
-        const newIsPaused = event.status === 'paused';
-
-        console.log('📊 State Update:', {
-          status: event.status,
-          newIsRecording,
-          newIsPaused,
-          previousIsRecording: isRecording,
-          previousIsPaused: recordingPaused,
-        });
-
-        setIsRecording(newIsRecording);
-        setRecordingPaused(newIsPaused);
-
-        // Handle VAD state changes
-        if (event.status === 'stopped') {
-          console.log('🧠 Recording stopped - updating VAD active state');
-          setVadActiveState(false);
-        } else if (event.status === 'recording' && vadEnabled) {
-          console.log('🧠 Recording started with VAD enabled - setting VAD active');
-          setVadActiveState(true);
-        }
-
-        if (event.status === 'error') {
-          console.error('❌ Recording Error:', event);
-          Alert.alert('Recording Error', 'Recording failed. Please try again.');
-          setIsRecording(false);
-          setRecordingPaused(false);
-          setVadActiveState(false);
-        }
+      if (event.status === 'stopped') {
+        setVadActiveState(false);
+      } else if (event.status === 'recording' && vadEnabled) {
+        setVadActiveState(true);
       }
-    );
 
-    const amplitudeSubscription = addRecorderAmplitudeListener((event: AudioMeteringEvent) => {
-      setAmplitude(event.amplitude);
-      // Only log every 10th amplitude to avoid spam
-      if (Math.random() < 0.1) {
-        console.log('🔊 Amplitude:', event.amplitude.toFixed(1), 'dB');
+      if (event.status === 'error') {
+        console.error('Recording error:', event);
+        Alert.alert('Recording Error', 'Recording failed. Please try again.');
+        setIsRecording(false);
+        setRecordingPaused(false);
+        setVadActiveState(false);
       }
     });
 
-    const vadSubscription = addVoiceActivityListener((event: VoiceActivityEvent) => {
-      console.log({ event });
-      console.log('🧠 VAD Event:', {
-        isVoiceDetected: event.isVoiceDetected,
-        confidence: event.confidence?.toFixed(3),
-        eventType: event.eventType,
-        timestamp: new Date().toISOString(),
-        stateDuration: event.stateDuration,
-        audioLevel: event.audioLevel?.toFixed(1),
-        isStateChange: event.isStateChange,
-        previousState: event.previousState,
-        platformData: event.platformData,
-      });
+    const amplitudeSubscription = addRecorderAmplitudeListener((event: AudioMeteringEvent) => {
+      setAmplitude(event.amplitude);
+    });
 
+    const vadSubscription = addVoiceActivityListener((event: VoiceActivityEvent) => {
       setVoiceDetected(event.isVoiceDetected);
       setVoiceConfidence(event.confidence || 0);
-
-      // Update VAD active state based on actual events
       setVadActiveState(true);
     });
 
     const playerSubscription = addPlayerStatusListener((event: PlayerStatusChangeEvent) => {
-      console.log('🎵 Player Status:', event.isPlaying ? 'Playing' : 'Stopped');
       setIsPlaying(event.isPlaying);
     });
 
@@ -188,7 +124,6 @@ export default function AppImproved() {
     };
   }, []);
 
-  // Pulse animation for recording
   useEffect(() => {
     if (isRecording && !recordingPaused) {
       const pulse = Animated.loop(
@@ -210,7 +145,6 @@ export default function AppImproved() {
     }
   }, [isRecording, recordingPaused, pulseAnim]);
 
-  // Set VAD threshold when permission is granted
   useEffect(() => {
     if (hasPermission) {
       try {
@@ -223,18 +157,14 @@ export default function AppImproved() {
 
   const handleStartRecording = useCallback(async () => {
     if (!hasPermission) {
-      console.warn('🚫 Recording: No microphone permission');
       Alert.alert('Permission Required', 'Please grant microphone permission first.');
       return;
     }
 
     try {
-      console.log('🎤️ Starting recording...');
-      console.log('🧠 VAD State before recording:', { vadEnabled, vadActive });
+      console.log('Starting recording...');
 
-      // Configure audio session for recording
-      console.log('Configuring audio session for recording...');
-      const sessionConfig = configureAudioSession({
+     configureAudioSession({
         category: 'playAndRecord',
         mode: 'default',
         options: {
@@ -243,76 +173,55 @@ export default function AppImproved() {
           allowBluetoothA2DP: true,
         },
       });
-      console.log('Audio session config result:', sessionConfig);
-
-      // Activate audio session
-      console.log('Activating audio session...');
-      const activationResult = activateAudioSession();
-      console.log('Audio session activation result:', activationResult);
+      await activateAudioSession();
 
       const result = startRecording();
-      console.log('🎤️ Recording started:', result);
+      console.log('Started recording:', result);
       setRecordingPath(result);
-
-      // Check if VAD should be active
-      if (vadEnabled) {
-        console.log('🧠 VAD is enabled - should start automatically with recording');
-      }
     } catch (error) {
-      console.error('❌ Start recording error:', error);
+      console.error('Recording error:', error);
       Alert.alert('Error', 'Failed to start recording');
     }
   }, [hasPermission, vadEnabled, vadActive]);
 
   const handleStopRecording = useCallback(() => {
     try {
-      console.log('🛑 Stopping recording...');
-      console.log('🧠 VAD State before stopping:', { vadEnabled, vadActive });
-
       const result = stopRecording();
-      console.log('🛑 Recording stopped:', result);
+      console.log('Stopped recording:', result);
 
       setRecordingPath(result);
       setIsRecording(false);
       setRecordingPaused(false);
 
-      // VAD should auto-stop with recording
       if (vadEnabled) {
-        console.log('🧠 VAD should auto-stop with recording');
         setVadActiveState(false);
       }
     } catch (error) {
-      console.error('❌ Stop recording error:', error);
+      console.error('Error stopping recording:', error);
       Alert.alert('Error', 'Failed to stop recording');
     }
   }, [vadEnabled, vadActive]);
 
   const handleToggleVAD = useCallback(() => {
     if (!hasPermission) {
-      console.warn('🚫 VAD Toggle: No microphone permission');
       Alert.alert('Permission Required', 'Please grant microphone permission first.');
       return;
     }
 
     try {
       const newVadState = !vadEnabled;
-      console.log('🧠 Toggling VAD:', { from: vadEnabled, to: newVadState });
+      console.log('VAD:', vadEnabled ? 'off' : 'on');
 
-      const result = setVADEnabled(newVadState);
-      console.log('🧠 VAD Toggle Result:', result);
-
+      setVADEnabled(newVadState);
       setVadEnabledState(newVadState);
 
       if (!newVadState) {
-        console.log('🧠 VAD Disabled - Clearing voice state');
         setVoiceDetected(false);
         setVoiceConfidence(0);
         setVadActiveState(false);
-      } else {
-        console.log('🧠 VAD Enabled - Waiting for voice events...');
       }
     } catch (error) {
-      console.error('❌ Toggle VAD error:', error);
+      console.error('VAD toggle error:', error);
       Alert.alert('Error', 'Failed to toggle voice activity detection');
     }
   }, [hasPermission, vadEnabled]);
@@ -324,9 +233,7 @@ export default function AppImproved() {
     }
 
     try {
-      // Configure audio session for playback
-      console.log('Configuring audio session for playback...');
-      const sessionConfig = configureAudioSession({
+      configureAudioSession({
         category: 'playback',
         mode: 'default',
         options: {
@@ -335,11 +242,8 @@ export default function AppImproved() {
           allowBluetoothA2DP: true,
         },
       });
-      console.log('Audio session config result:', sessionConfig);
 
-      // Activate audio session
-      const activationResult = await activateAudioSession();
-      console.log('Audio session activation result:', activationResult);
+      await activateAudioSession();
 
       const duration = getDuration(recordingPath);
       setAudioDuration(duration);

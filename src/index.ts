@@ -1,39 +1,3 @@
-/**
- * @fileoverview Expo Audio Handler - Cross-platform audio recording and playback module
- * @version 2.0.5
- * @author Sandro Gamrekelashvili <sgamrekelashvili@gmail.com>
- *
- * @description
- * A comprehensive audio handling module for React Native Expo applications that provides:
- * - High-quality audio recording with pause/resume functionality
- * - Audio playback with speed control and seeking
- * - Voice Activity Detection (VAD) using advanced algorithms
- * - Cross-platform compatibility (iOS and Android)
- * - TypeScript support with comprehensive type definitions
- *
- * @example
- * ```typescript
- * import {
- *   startRecording,
- *   stopRecording,
- *   startPlaying,
- *   addRecorderStatusListener
- * } from 'expo-audio-handler';
- *
- * // Start recording
- * const recordingPath = startRecording();
- *
- * // Listen for recording events
- * const subscription = addRecorderStatusListener((event) => {
- *   console.log('Recording status:', event.status);
- * });
- *
- * // Stop recording and play it back
- * const filePath = stopRecording();
- * startPlaying(filePath);
- * ```
- */
-
 import { EventSubscription } from 'expo-modules-core';
 import ExpoAudioStudioModule from './ExpoAudioStudioModule';
 import {
@@ -49,11 +13,6 @@ import {
   VADPlatformInfo,
 } from './ExpoAudioStudio.types';
 
-// ============================================================================
-// TYPE EXPORTS
-// ============================================================================
-
-// Re-export all types for consumers of the module
 export type {
   // Event types
   AudioMeteringEvent,
@@ -104,9 +63,7 @@ export type {
 // Export the native module
 export { default } from './ExpoAudioStudioModule';
 
-// ============================================================================
-// EVENT LISTENERS
-// ============================================================================
+// Event Listeners
 
 /**
  * Adds a listener for player status changes (play, pause, stop, finish)
@@ -209,9 +166,7 @@ export function addVoiceActivityListener(
   return ExpoAudioStudioModule.addListener('onVoiceActivityDetected', listener);
 }
 
-// ============================================================================
-// PLAYBACK FUNCTIONS
-// ============================================================================
+// Playback Functions
 
 /**
  * Prepares audio player without starting playback
@@ -272,9 +227,7 @@ export function stopPlaying(): string {
   return ExpoAudioStudioModule.stopPlayer();
 }
 
-// ============================================================================
-// RECORDING FUNCTIONS
-// ============================================================================
+// Recording Functions
 
 /**
  * Starts audio recording with optional custom directory
@@ -357,9 +310,7 @@ export function resumeRecording(): string {
   return ExpoAudioStudioModule.resumeRecording();
 }
 
-// ============================================================================
-// PLAYBACK CONTROL FUNCTIONS
-// ============================================================================
+// Playback Control
 
 /**
  * Pauses the current audio playback
@@ -423,9 +374,7 @@ export function setPlaybackSpeed(speed: number): string {
   return ExpoAudioStudioModule.setPlaybackSpeed(speed.toString());
 }
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
+// Utility Functions
 
 /**
  * Gets the file path of the last completed recording
@@ -445,9 +394,7 @@ export function lastRecording(): string | null {
   return ExpoAudioStudioModule.lastRecording();
 }
 
-// ============================================================================
-// FILE MANAGEMENT FUNCTIONS
-// ============================================================================
+// File Management
 
 /**
  * Lists all audio recordings in a directory
@@ -575,9 +522,7 @@ export function getAudioAmplitudes(fileUrl: string, barsCount: number): AudioAmp
   return ExpoAudioStudioModule.getAudioAmplitudes(fileUrl, barsCount);
 }
 
-// ============================================================================
-// PERMISSION FUNCTIONS
-// ============================================================================
+// Permissions
 
 /**
  * Requests microphone permission from the user
@@ -616,9 +561,7 @@ export function getMicrophonePermissionStatus(): Promise<PermissionResponse> {
   return ExpoAudioStudioModule.getMicrophonePermissionStatus();
 }
 
-// ============================================================================
-// VOICE ACTIVITY DETECTION FUNCTIONS
-// ============================================================================
+// Voice Activity Detection
 
 /**
  * Sets VAD enabled state - manages VAD lifecycle automatically
@@ -730,9 +673,7 @@ export function setVoiceActivityThreshold(threshold: number): string {
   return ExpoAudioStudioModule.setVoiceActivityThreshold(threshold);
 }
 
-// ============================================================================
-// AUDIO SESSION FUNCTIONS
-// ============================================================================
+// Audio Session
 
 /**
  * Configures the audio session with specified category, mode, and options
@@ -793,9 +734,7 @@ export function deactivateAudioSession(): Promise<void> {
   return ExpoAudioStudioModule.deactivateAudioSession();
 }
 
-// ============================================================================
-// PROPERTIES (READ-ONLY)
-// ============================================================================
+// Properties
 
 /**
  * Detailed player status information
