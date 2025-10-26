@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.1.1...v1.1.2) (2025-10-26)
+
+
+### Bug Fixes
+
+* **ios:** use rate property instead of getPlaybackSpeed() method ([b85c87e](https://github.com/SGamrekelashvili/expo-audio-studio/commit/b85c87e185c976fd6e0af674b731bd2b0d35dc90))
+
 ## [1.1.1](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.1.0...v1.1.1) (2025-10-26)
 
 
