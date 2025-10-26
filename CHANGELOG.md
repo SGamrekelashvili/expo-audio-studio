@@ -1,3 +1,19 @@
+# [1.1.0](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.0.0...v1.1.0) (2025-10-26)
+
+
+### Bug Fixes
+
+* **ci:** configure git authentication for semantic-release ([f24caab](https://github.com/SGamrekelashvili/expo-audio-studio/commit/f24caabb1d67bb84bb762136b3da99ae2af5fef1))
+* **ci:** use personal access token for semantic-release ([123bcd0](https://github.com/SGamrekelashvili/expo-audio-studio/commit/123bcd080b6ccd8f3a444e5f6f7fc8af54744ceb))
+* **config:** update plugin package name reference ([47ea418](https://github.com/SGamrekelashvili/expo-audio-studio/commit/47ea418142520d0bbc0ba560f4178a224d424925))
+* **playback:** standardize playerStatus interface across platforms ([e4a7377](https://github.com/SGamrekelashvili/expo-audio-studio/commit/e4a7377b7e1279a4df6c834b69996bfdb8dbf550))
+* **types:** standardize playerStatus interface to match native implementations ([2791b39](https://github.com/SGamrekelashvili/expo-audio-studio/commit/2791b3903f0ce9fdb9c791760d6419f94b49cba7))
+
+
+### Features
+
+* **config:** configure automatic config plugin ([6aa8ada](https://github.com/SGamrekelashvili/expo-audio-studio/commit/6aa8adac2c2cc1240a3a2179f3c89c1af16fbec7))
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
