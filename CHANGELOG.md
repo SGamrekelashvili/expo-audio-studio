@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.1.0...v1.1.1) (2025-10-26)
+
+
+### Bug Fixes
+
+* **config:** configure automatic config plugin ([4e35ac9](https://github.com/SGamrekelashvili/expo-audio-studio/commit/4e35ac99b25c981cb74037be2f0f01d24350ae54))
+
 # [1.1.0](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.0.0...v1.1.0) (2025-10-26)
 
 
