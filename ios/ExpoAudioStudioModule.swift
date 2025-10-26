@@ -703,21 +703,19 @@ public class ExpoAudioStudioModule: Module {
         Property("playerStatus") {
             guard let player = self.audioManager.getPlayer() else {
                 return [
-                    "isPlaying": false, // Changed to Bool
-                    "percentage": 0.0,
-                    "currentSeconds": 0.0,
+                    "isPlaying": false,
+                    "currentTime": 0.0,
                     "duration": 0.0,
-                    "error": AudioError.noPlayer.rawValue // Using constant
+                    "speed": 1.0
                 ]
             }
             let duration = player.duration
             let currentTime = player.currentTime
-            let percentage = duration > 0 ? (currentTime / duration) * 100 : 0.0
             return [
-                "isPlaying": player.isPlaying, // Changed to Bool
-                "percentage": Double(percentage),
-                "currentSeconds": Double(currentTime),
-                "duration": Double(duration)
+                "isPlaying": player.isPlaying,
+                "currentTime": Double(currentTime),
+                "duration": Double(duration),
+                "speed": player.getPlaybackSpeed()
             ]
         }
         

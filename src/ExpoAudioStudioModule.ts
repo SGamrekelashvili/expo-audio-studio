@@ -307,7 +307,14 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    * console.log(`Playing: ${status.isPlaying}, Duration: ${status.duration}s`);
    * ```
    */
-  readonly playerStatus: string;
+  readonly playerStatus: {
+    isPlaying: boolean;
+    percentage: number;
+    currentSeconds: number;
+    duration: number;
+    error?: string;
+    speed: number;
+  };
 
   /**
    * Whether Voice Activity Detection is currently active (actually running)
