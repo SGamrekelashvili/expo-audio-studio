@@ -5,7 +5,7 @@ import {
   createRunOncePlugin,
 } from "expo/config-plugins";
 
-const pkg = require("expo-audio-handler/package.json");
+const pkg = require("expo-audio-studio/package.json");
 
 const MICROPHONE_USAGE = "Allow $(PRODUCT_NAME) to access your microphone";
 
