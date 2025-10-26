@@ -309,10 +309,8 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    */
   readonly playerStatus: {
     isPlaying: boolean;
-    percentage: number;
-    currentSeconds: number;
+    currentTime: number;
     duration: number;
-    error?: string;
     speed: number;
   };
 
