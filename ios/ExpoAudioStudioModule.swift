@@ -715,7 +715,7 @@ public class ExpoAudioStudioModule: Module {
                 "isPlaying": player.isPlaying,
                 "currentTime": Double(currentTime),
                 "duration": Double(duration),
-                "speed": player.getPlaybackSpeed()
+                "speed": player.rate
             ]
         }
         
