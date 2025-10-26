@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+
+# Run commitlint to validate commit message format
+npx --no-install commitlint --edit "$1"

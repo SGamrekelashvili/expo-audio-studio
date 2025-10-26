@@ -1,0 +1,239 @@
+//
+//  AudioManager.swift
+//  Pods
+//
+//  Created by Sandro Gamrekelashvili on 20.05.25.
+//
+
+import Foundation
+import AVFoundation
+
+class AudioManager: NSObject, PlayerDelegateProtocol {
+    
+    private var audioPlayer: AVAudioPlayer?
+    
+    private var currentPlaybackSpeed: Float = 1.0
+    private var onPlayerStatusChange: ((Bool, Bool) -> Void)?
+    
+    private var playerDelegate: PlayerDelegate?
+    
+
+    
+    func preparePlayer(path: String, sendPlayerStatusEvent: @escaping (Bool, Bool) -> Void) -> String? {
+        // Store the callback for later delegate events
+        self.onPlayerStatusChange = sendPlayerStatusEvent
+
+        do {
+            print("[\(Date())] preparePlayer: Preparing audio player for path: \(path)")
+            
+            guard let audioFileURL = URL(string: path) else {
+                return "InvalidUrlException: Malformed URL"
+            }
+            
+            if audioFileURL.isFileURL {
+                if !FileManager.default.fileExists(atPath: audioFileURL.path) {
+                    print("[\(Date())] preparePlayer: File not found at path: \(audioFileURL.path)")
+                    return "InvalidUrlException: File not found at \(path)"
+                }
+            }
+            
+            // PROPER CLEANUP: Stop and release old player completely
+            if let existingPlayer = self.audioPlayer {
+                print("[\(Date())] preparePlayer: Properly cleaning up existing player")
+                existingPlayer.stop()
+                // existingPlayer is automatically released when audioPlayer is reassigned
+            }
+            
+            // Always create new player (even for same path to ensure clean state)
+            audioPlayer = try AVAudioPlayer(contentsOf: audioFileURL)
+            
+            // Ensure player was created
+            guard let player = self.audioPlayer else {
+                sendPlayerStatusEvent(false, false)
+                return "PlaybackFailedException: Player is nil"
+            }
+            
+            // Set up delegate and properties
+            self.playerDelegate = PlayerDelegate(delegate: self)
+            player.delegate = self.playerDelegate
+            player.enableRate = true
+            player.rate = currentPlaybackSpeed
+            player.volume = 1.0
+            player.currentTime = 0.0
+            
+            // PREPARE but DON'T START
+            if !player.prepareToPlay() {
+                print("[\(Date())] preparePlayer: prepareToPlay failed.")
+                sendPlayerStatusEvent(false, false)
+                self.audioPlayer = nil
+                return "PlaybackFailedException: prepareToPlay failed"
+            }
+            
+            print("[\(Date())] preparePlayer: Player prepared successfully, ready for playback")
+            sendPlayerStatusEvent(false, false) // Not playing, not finished
+            return "prepared"
+            
+        } catch {
+            sendPlayerStatusEvent(false, false)
+            self.audioPlayer = nil
+            return "PLAYBACK_PREPARE_ERROR: \(error.localizedDescription)"
+        }
+    }
+
+    func startPlayingAudio(path: String, sendPlayerStatusEvent: @escaping (Bool, Bool) -> Void) -> String? {
+        // Check if we already have a prepared player for this path
+        if let existingPlayer = self.audioPlayer, existingPlayer.url?.path == path {
+            print("[\(Date())] startPlayingAudio: Using already prepared player")
+            self.onPlayerStatusChange = sendPlayerStatusEvent
+            
+            if existingPlayer.play() {
+                sendPlayerStatusEvent(true, false)
+                return "playing"
+            } else {
+                sendPlayerStatusEvent(false, false)
+                return "PlaybackFailedException: play() failed on prepared player"
+            }
+        }
+        
+        // If no prepared player or different path, prepare and start
+        let prepareResult = preparePlayer(path: path, sendPlayerStatusEvent: sendPlayerStatusEvent)
+        if prepareResult != "prepared" {
+            return prepareResult // Return prepare error
+        }
+        
+        // Now start the prepared player
+        guard let player = self.audioPlayer else {
+            sendPlayerStatusEvent(false, false)
+            return "PlaybackFailedException: Player is nil after prepare"
+        }
+        
+        if player.play() {
+            sendPlayerStatusEvent(true, false)
+            return "playing"
+        } else {
+            sendPlayerStatusEvent(false, false)
+            return "PlaybackFailedException: play() returned false"
+        }
+        
+        
+    }
+    
+    func stopPlayingAudio() -> Bool {
+        
+        guard let player = self.audioPlayer else {
+            return false
+        }
+
+        player.stop()
+        self.audioPlayer = nil
+        return false // Indicate that stop is complete
+    }
+    
+    func pausePlayingAudio() -> String {
+        guard let player = self.audioPlayer else {
+            return "NoPlayerException"
+        }
+        
+        player.pause()
+        onPlayerStatusChange?(false, false)
+        return "paused"
+    }
+    
+    func resumePlayingAudio() -> String {
+        guard let player = self.audioPlayer else {
+            return "NoPlayerException"
+        }
+        
+        if player.play() {
+            onPlayerStatusChange?(true, false)
+            return "playing"
+        } else {
+            onPlayerStatusChange?(false, false)
+            return "PlaybackFailedException: resume failed"
+        }
+    }
+    
+    func setPlaybackSpeed(speed: Float) -> String {
+        guard let player = self.audioPlayer else {
+            currentPlaybackSpeed = speed // Store for next playback
+            return "NoPlayerException"
+        }
+        
+        if player.enableRate {
+            player.rate = speed
+            currentPlaybackSpeed = speed
+            return "success"
+        } else {
+            return "PlaybackFailedException: rate change not supported"
+        }
+    }
+    
+    func getPlayerStatus() -> [String: Any] {
+        guard let player = self.audioPlayer else {
+            return [
+                "isPlaying": false,
+                "duration": 0,
+                "currentTime": 0,
+                "speed": currentPlaybackSpeed
+            ]
+        }
+        
+        return [
+            "isPlaying": player.isPlaying,
+            "duration": player.duration,
+            "currentTime": player.currentTime,
+            "speed": player.rate
+        ]
+    }
+    
+    func seekToTime(position: TimeInterval) -> String {
+        guard let player = self.audioPlayer else {
+            return "NoPlayerException"
+        }
+        
+        player.currentTime = min(max(0, position), player.duration)
+        return "success"
+    }
+    
+    // Provide access to player for direct status checks
+    func getPlayer() -> AVAudioPlayer? {
+        return audioPlayer
+    }
+    
+    // MARK: - Volume Control
+    
+    func setVolume(volume: Float) -> String {
+        guard let player = self.audioPlayer else {
+            return "NoPlayerException"
+        }
+        
+        // Ensure volume is between 0 and 1
+        let normalizedVolume = min(max(0.0, volume), 1.0)
+        player.volume = normalizedVolume
+        return "success"
+    }
+    
+    func getVolume() -> Float {
+        return self.audioPlayer?.volume ?? 1.0
+    }
+    
+    // MARK: - PlayerDelegateProtocol
+    
+    func playerDidFinishPlaying(successfully: Bool) {
+        // Ensure cleanup and status update happen on the main thread
+        DispatchQueue.main.async { [weak self] in
+            self?.onPlayerStatusChange?(false, true)
+            self?.audioPlayer = nil // Clean up player instance
+            print("[\(Date())] Player cleanup complete.")
+        }
+    }
+    
+    func playerDecodeErrorDidOccur(error: Error?) {
+        // Ensure cleanup and status update happen on the main thread
+        DispatchQueue.main.async { [weak self] in
+            self?.onPlayerStatusChange?(false, false)
+            self?.audioPlayer = nil
+            print("[\(Date())] Player decode error cleanup complete. Error: \(String(describing: error))")
+        }
+    }
+}
