@@ -993,7 +993,6 @@ public class ExpoAudioStudioModule: Module {
         switch reason {
         case .newDeviceAvailable:
             print("[\(Date())] ✅ New audio device available")
-            printCurrentAudioRoute()
             
             if hasBluetoothOutput() {
                 print("[\(Date())] 🎧 Bluetooth device connected")
@@ -1004,7 +1003,6 @@ public class ExpoAudioStudioModule: Module {
             
         case .oldDeviceUnavailable:
             print("[\(Date())] ❌ Audio device disconnected")
-            printCurrentAudioRoute()
             
             // If playback is active and output device is unavailable, pause playback
             if audioManager.getPlayer()?.isPlaying == true {
