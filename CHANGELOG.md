@@ -1,3 +1,21 @@
+# [1.2.0](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.1.2...v1.2.0) (2025-10-27)
+
+
+### Bug Fixes
+
+* **android:** dead zones ([d9e83d1](https://github.com/SGamrekelashvili/expo-audio-studio/commit/d9e83d174f23af0da47b5a941ff80a8837ecf735))
+* **api:** remove mettering from voiceActivityEvent becuase it was platform specific ([99e4b11](https://github.com/SGamrekelashvili/expo-audio-studio/commit/99e4b11861a5cc392350c492c28a0b8e8872f292))
+* **api:** remove mettering from voiceActivityEvent becuase it was platform specific ([8a928c1](https://github.com/SGamrekelashvili/expo-audio-studio/commit/8a928c1c9125ff7e0b02917af62c587e358dc379))
+* **api:** remove unused types ([359445b](https://github.com/SGamrekelashvili/expo-audio-studio/commit/359445b5e98a72610155161ea2f096ffd0399492))
+* **docs:** platform specific session management ([8bd2275](https://github.com/SGamrekelashvili/expo-audio-studio/commit/8bd2275b8cf1ec7c7e47aec9ad65db83f62d92c1))
+* **ios:** dead zones ([d38eb8a](https://github.com/SGamrekelashvili/expo-audio-studio/commit/d38eb8a7e5833dce01b20633c92a7241666da6ba))
+* **vad:** configurations types and deprecated apis ([1f13e99](https://github.com/SGamrekelashvili/expo-audio-studio/commit/1f13e992a83c8c0eeeb006b4d13eb9613565481c))
+
+
+### Features
+
+* fixing apis with correct response types ([afaaedf](https://github.com/SGamrekelashvili/expo-audio-studio/commit/afaaedfa28d4dfa1fab5ca9e9b86acf5c3d5b6c3))
+
 ## [1.1.2](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.1.1...v1.1.2) (2025-10-26)
 
 
