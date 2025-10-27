@@ -43,19 +43,18 @@ public class ExpoAudioStudioModule: Module {
     private let audioManager = AudioManager()
     private let recorderManager = RecorderManager()
     
-    @available(iOS 13.0, *)
+    @available(iOS 14.0, *)
     private var soundClassificationManager: EnhancedSoundClassificationManager?
     
     private var isVADEnabledFromJS: Bool = false
     
-    // Flags to remember if we were playing/recording before an interruption
     private var wasPlayingBeforeInterruption: Bool = false
     private var wasRecordingBeforeInterruption: Bool = false
     
     
     
     
-    @available(iOS 13.0, *)
+    @available(iOS 14.0, *)
     private func getSoundClassificationManager() -> EnhancedSoundClassificationManager {
         if soundClassificationManager == nil {
             soundClassificationManager = EnhancedSoundClassificationManager()
@@ -83,7 +82,7 @@ public class ExpoAudioStudioModule: Module {
     func sendRecorderStatusEvent(status: String) {
         print("[\(Date())] sendRecorderStatusEvent: status=\(status)")
         sendEvent("onRecorderStatusChange", [
-            "status": status // e.g., "recording", "stopped", "failed", "error"
+            "status": status 
         ])
     }
 
@@ -101,7 +100,6 @@ public class ExpoAudioStudioModule: Module {
     private func setupNotificationObservers() {
         print("[\(Date())] Setting up notification observers...")
         
-        // Audio Session Interruption Observer
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleAudioSessionInterruption),
@@ -109,7 +107,6 @@ public class ExpoAudioStudioModule: Module {
             object: nil
         )
         
-        // Audio Route Change Observer
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleRouteChange),
@@ -120,9 +117,6 @@ public class ExpoAudioStudioModule: Module {
         print("[\(Date())] Notification observers setup completed")
     }
     
-    /**
-     Removes all previously set notification observers.
-     */
     private func removeNotificationObservers() {
         print("[\(Date())] Removing notification observers...")
         NotificationCenter.default.removeObserver(self, name: AVAudioSession.interruptionNotification, object: nil)
@@ -139,12 +133,10 @@ public class ExpoAudioStudioModule: Module {
         // Called when the module is created
         OnCreate {
             print("[\(Date())] ExpoAudioStudioModule: OnCreate called")
-            setupNotificationObservers() // Setup notification observers
-            printCurrentAudioRoute() // Print initial audio route info
+            setupNotificationObservers() 
             
-            // VAD OPTIMIZATION: Set up callback to auto-stop VAD when recording stops
             recorderManager.setRecordingStoppedCallback { [weak self] in
-                if #available(iOS 13.0, *) {
+                if #available(iOS 14.0, *) {
                     if let strongSelf = self, strongSelf.isVADEnabledFromJS {
                         print("[\(Date())] Auto-stopping VAD due to recording stop")
                         _ = strongSelf.soundClassificationManager?.stopVoiceActivityDetection()
@@ -153,16 +145,13 @@ public class ExpoAudioStudioModule: Module {
             }
         }
         
-        // Called when the module is destroyed (e.g., app closes)
         OnDestroy {
-            print("[\(Date())] ExpoAudioStudioModule: OnDestroy called, cleaning up resources.")
-            removeNotificationObservers() // Remove notification observers first
+            removeNotificationObservers()
             
-            // Stop and release any active audio players or recorders
             _ = audioManager.stopPlayingAudio()
             _ = recorderManager.stopRecording()
             
-            if #available(iOS 13.0, *) {
+            if #available(iOS 14.0, *) {
                   if let manager = self.soundClassificationManager, manager.isVoiceActivityDetectionActive() {
                       _ = manager.stopVoiceActivityDetection()
                   }
@@ -173,7 +162,6 @@ public class ExpoAudioStudioModule: Module {
             print("[\(Date())] Cleanup complete.")
         }
         
-        // Register event types that can be sent to JavaScript
         Events(
             "onPlayerStatusChange",
             "onRecorderStatusChange",
@@ -183,14 +171,12 @@ public class ExpoAudioStudioModule: Module {
         
         // MARK: - Recording Functions
         
-        // Function to get the path of the last recorded file
         Function("lastRecording") { () -> String? in
             return recorderManager.getRecordedFilePath()
         }
         
         // MARK: - File Management Functions
         
-        // Function to list all recordings in a directory
         Function("listRecordings") { (directoryPath: String?) -> [[String: Any]] in
             let directory: URL
             
@@ -238,9 +224,8 @@ public class ExpoAudioStudioModule: Module {
             }
         }
         
-        // Function to join multiple audio files using AVMutableComposition (PROFESSIONAL APPROACH)
         Function("joinAudioFiles") { (filePaths: [String], outputPath: String) -> String in
-            print("[\(Date())] Starting PROFESSIONAL audio joining with \(filePaths.count) files")
+            print("[\(Date())] Starting audio join with \(filePaths.count) files")
             
             guard filePaths.count >= 2 else {
                 return "Error: At least 2 audio files are required for joining"
@@ -274,7 +259,7 @@ public class ExpoAudioStudioModule: Module {
                 print("[\(Date())] Deleted existing output file")
             }
             
-            // Use AVMutableComposition for professional audio joining
+            // Use AVMutableComposition to stitch inputs together
             let composition = AVMutableComposition()
             guard let compositionAudioTrack = composition.addMutableTrack(
                 withMediaType: .audio,
@@ -291,7 +276,7 @@ public class ExpoAudioStudioModule: Module {
                 
                 let asset = AVURLAsset(url: inputURL)
                 guard let assetTrack = asset.tracks(withMediaType: .audio).first else {
-                    print("[\(Date())] Warning: No audio track found in file \(index)")
+                    print("[\(Date())] Warning: No audio track found in file index \(index)")
                     continue
                 }
                 
@@ -375,7 +360,6 @@ public class ExpoAudioStudioModule: Module {
             return exportResult
         }
         
-        // Function to set amplitude update frequency (for 60 FPS animations)
         Function("setAmplitudeUpdateFrequency") { (frequencyHz: Double) -> String in
             print("[\(Date())] setAmplitudeUpdateFrequency called with \(frequencyHz) Hz")
             
@@ -384,7 +368,6 @@ public class ExpoAudioStudioModule: Module {
             return "Amplitude frequency set to \(frequencyHz) Hz"
         }
         
-        // Function to start audio recording
         Function("startRecording") { (directoryPath: String?) -> String in
             print("[\(Date())] startRecording function called with directory: \(directoryPath ?? "default")")
             let _ = self.audioManager.stopPlayingAudio()
@@ -400,7 +383,7 @@ public class ExpoAudioStudioModule: Module {
                     
                     // Auto-start VAD when recording starts if enabled
                     if status == "recording" && self.isVADEnabledFromJS {
-                        if #available(iOS 13.0, *) {
+                        if #available(iOS 14.0, *) {
                             print("[\(Date())] Auto-starting VAD because recording started and VAD is enabled")
                             let vadResult = self.getSoundClassificationManager().startVoiceActivityDetection { [weak self] event in
                                 self?.sendVoiceActivityEvent(event)
@@ -418,12 +401,11 @@ public class ExpoAudioStudioModule: Module {
             return result
         }
         
-        // Function to stop audio recording
         Function("stopRecording") { () -> String in
             print("[\(Date())] stopRecording function called")
             
             // Stop VAD when recording stops (if it was running)
-            if #available(iOS 13.0, *) {
+            if #available(iOS 14.0, *) {
                 let vadActive = self.soundClassificationManager?.isVoiceActivityDetectionActive() ?? false
                 if vadActive {
                     print("[\(Date())] Auto-stopping VAD because recording stopped")
@@ -464,7 +446,6 @@ public class ExpoAudioStudioModule: Module {
             }
         }
         
-        // Function to start playing audio from a given path (URI)
         Function("startPlaying") { (path: String) -> String in
             print("[\(Date())] startPlaying function called with path: \(path)")
             // Audio session configuration now handled from JavaScript side
@@ -480,7 +461,6 @@ public class ExpoAudioStudioModule: Module {
             }
         }
         
-        // Function to stop the current audio playback
         Function("stopPlayer") { () -> String in
             print("[\(Date())] stopPlayer function called.")
             
@@ -491,7 +471,6 @@ public class ExpoAudioStudioModule: Module {
             return result ? "stopped" : "NoPlayerException"
         }
         
-        // Function to set the playback speed
         Function("setPlaybackSpeed") { (speedString: String) -> String in
             guard let speedFloat = Float(speedString) else {
                 return AudioError.invalidSpeedFormat.rawValue
@@ -524,7 +503,6 @@ public class ExpoAudioStudioModule: Module {
             return result
         }
         
-        // Function to resume audio playback
         Function("resumePlayer") { () -> String in
             print("[\(Date())] resumePlayer function called.")
             
@@ -590,7 +568,6 @@ public class ExpoAudioStudioModule: Module {
             promise.resolve(permissionResponse)
         }
         
-        // Function to get the duration of an audio file from its URI
         Function("getDuration") { (uri: String) -> Double in
             print("[\(Date())] getDuration called for uri: \(uri)")
             guard let audioURL = URL(string: uri) else {
@@ -617,7 +594,6 @@ public class ExpoAudioStudioModule: Module {
             return durationInSeconds
         }
         
-        // Function to get audio amplitudes for visualization bars
         Function("getAudioAmplitudes") { (fileUrl: String, barsCount: Int) -> [String: Any] in
             print("[\(Date())] getAudioAmplitudes called for fileUrl: \(fileUrl), barsCount: \(barsCount)")
             
@@ -672,11 +648,6 @@ public class ExpoAudioStudioModule: Module {
             return Double(recorder.averagePower(forChannel: 0))
         }
         
-        // Property to check if recording is paused
-        Property("isPaused") {
-            return self.recorderManager.isPaused()
-        }
-        
         // Property to provide detailed player status
         Property("playerStatus") {
             guard let player = self.audioManager.getPlayer() else {
@@ -703,7 +674,7 @@ public class ExpoAudioStudioModule: Module {
         Function("setVoiceActivityThreshold") { (threshold: Float) -> String in
             print("[\(Date())] setVoiceActivityThreshold function called with threshold: \(threshold)")
             
-            if #available(iOS 13.0, *) {
+            if #available(iOS 14.0, *) {
                 if threshold >= 0.0 && threshold <= 1.0 {
                     self.getSoundClassificationManager().updateThreshold(threshold)
                     return "Success: Threshold set to \(threshold)"
@@ -711,14 +682,14 @@ public class ExpoAudioStudioModule: Module {
                     return "InvalidThreshold: Threshold must be between 0.0 and 1.0"
                 }
             } else {
-                return "UnsupportedIOSVersion: Voice activity detection requires iOS 13.0 or later"
+                return "UnsupportedIOSVersion: Voice activity detection requires iOS 14.0 or later"
             }
         }
 
         Function("setVADEnabled") { (enabled: Bool) -> String in
             print("[\(Date())] setVADEnabled function called with enabled: \(enabled)")
             
-            if #available(iOS 13.0, *) {
+            if #available(iOS 14.0, *) {
                 if enabled {
                     // Set VAD preference
                     self.isVADEnabledFromJS = true
@@ -740,12 +711,12 @@ public class ExpoAudioStudioModule: Module {
                     return "VAD disabled: \(result)"
                 }
             } else {
-                return "UnsupportedIOSVersion: Voice activity detection requires iOS 13.0 or later"
+                return "UnsupportedIOSVersion: Voice activity detection requires iOS 14.0 or later"
             }
         }
 
         Property("isVADActive") {
-            if #available(iOS 13.0, *) {
+            if #available(iOS 14.0, *) {
                 return self.soundClassificationManager?.isVoiceActivityDetectionActive() ?? false
             } else {
                 return false
@@ -757,7 +728,7 @@ public class ExpoAudioStudioModule: Module {
         }
         
         Function("setVADEventMode") { (mode: String, throttleMs: Int?) -> String in
-            if #available(iOS 13.0, *) {
+            if #available(iOS 14.0, *) {
                 let manager = self.getSoundClassificationManager()
                 manager.vadEventMode = mode
                 
@@ -767,12 +738,12 @@ public class ExpoAudioStudioModule: Module {
                 
                 return "VAD event mode set to: \(mode)" + (throttleMs != nil ? " with \(throttleMs!)ms throttle" : "")
             } else {
-                return "UnsupportedIOSVersion: Voice activity detection requires iOS 13.0 or later"
+                return "UnsupportedIOSVersion: Voice activity detection requires iOS 14.0 or later"
             }
         }
         
         Property("isVoiceActivityDetectionActive") {
-            if #available(iOS 13.0, *) {
+            if #available(iOS 14.0, *) {
                 return self.soundClassificationManager?.isVoiceActivityDetectionActive() ?? false
             } else {
                 return false
@@ -926,27 +897,6 @@ public class ExpoAudioStudioModule: Module {
     
     
     // MARK: - Helper Functions
-    
-    /**
-     Prints the current audio output and input routes to the console.
-     */
-    private func printCurrentAudioRoute() {
-        let currentRoute = AVAudioSession.sharedInstance().currentRoute
-        print("[\(Date())] === Current Audio Route ===")
-        print("Inputs:")
-        for input in currentRoute.inputs {
-            print("  📍 \(input.portName) (\(input.portType.rawValue))")
-        }
-        print("Outputs:")
-        for output in currentRoute.outputs {
-            print("  🔊 \(output.portName) (\(output.portType.rawValue))")
-        }
-        print("========================")
-    }
-    
-    /**
-     Checks if a Bluetooth audio output device is currently connected.
-     */
     private func hasBluetoothOutput() -> Bool {
         let currentRoute = AVAudioSession.sharedInstance().currentRoute
         return currentRoute.outputs.contains { output in
@@ -956,9 +906,6 @@ public class ExpoAudioStudioModule: Module {
         }
     }
     
-    /**
-     Checks if wired headphones are currently connected.
-     */
     private func hasWiredHeadphones() -> Bool {
         let currentRoute = AVAudioSession.sharedInstance().currentRoute
         return currentRoute.outputs.contains { output in

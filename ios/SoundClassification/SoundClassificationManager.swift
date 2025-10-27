@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 import SoundAnalysis
 
-@available(iOS 13.0, *)
+@available(iOS 14.0, *)
 class EnhancedSoundClassificationManager: NSObject {
     
     private var audioEngine: AVAudioEngine?
@@ -36,11 +36,9 @@ class EnhancedSoundClassificationManager: NSObject {
         
         voiceActivityCallback = callback
         
-        if #available(iOS 14.0, *) {
-            return startSoundClassificationDetection()
-        } else {
-            return "UnsupportedIOSVersion: Sound classification requires iOS 14.0 or later"
-        }
+      
+        return startSoundClassificationDetection()
+   
     }
     
     func stopVoiceActivityDetection() -> String {
@@ -96,7 +94,6 @@ class EnhancedSoundClassificationManager: NSObject {
             try audioEngine.start()
             isAnalyzing = true
             
-            print("✅ Standalone voice activity detection started")
             return "Success"
             
         } catch {
@@ -193,7 +190,7 @@ class EnhancedSoundClassificationManager: NSObject {
 }
 
 // MARK: - SNResultsObserving
-@available(iOS 13.0, *)
+@available(iOS 14.0, *)
 extension EnhancedSoundClassificationManager: SNResultsObserving {
     func request(_ request: SNRequest, didProduce result: SNResult) {
         guard let classificationResult = result as? SNClassificationResult else { return }
