@@ -10,7 +10,6 @@ import android.media.audiofx.NoiseSuppressor
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
-import androidx.core.content.ContentProviderCompat.requireContext
 import com.github.squti.androidwaverecorder.RecorderState
 import com.github.squti.androidwaverecorder.WaveRecorder
 import com.konovalov.vad.silero.VadSilero
@@ -37,9 +36,6 @@ class MediaRecorderProviderWithSileroVAD(
 
     @Volatile private var waveRecorder: WaveRecorder? = null
     @Volatile private var recorderState: RecorderState? = null
-    private val _recorderStatusStateFlow = MutableStateFlow(RecorderInnerState(RecorderState.STOP))
-    private val _recorderTimeElapsedStateFlow = MutableStateFlow(RecorderProgress(0))
-    private val _recorderMetricsFlow = MutableStateFlow(RecorderMetrics(0))
     private val sendStatusEvent = SendStatusEvent
     private val sendAmplitudeEvent = SendAmplitudeEvent
     private val sendVoiceActivityEvent = SendVoiceActivityEvent
@@ -275,7 +271,6 @@ class MediaRecorderProviderWithSileroVAD(
 
     private suspend fun processVADAudioStream() {
         val buffer = ShortArray(frameSize)
-        var lastVoiceState = false
         var consecutiveErrors = 0
         val maxConsecutiveErrors = 5
 
@@ -308,8 +303,6 @@ class MediaRecorderProviderWithSileroVAD(
                                 if (isVoice) "speech_continue" else "silence_continue"
                             }
                             
-                            val stateDuration = 0
-                            
                             withContext(Dispatchers.Main) {
                                 val result = mapOf(
                                     "isVoiceDetected" to isVoice,
@@ -318,8 +311,7 @@ class MediaRecorderProviderWithSileroVAD(
                                     "audioLevel" to amplitude,
                                     "isStateChange" to isStateChange,
                                     "previousState" to lastVoiceState,
-                                    "eventType" to eventType,
-                                    "stateDuration" to stateDuration
+                                    "eventType" to eventType
                                 )
                                 sendVoiceActivityEvent(result)
                             }
@@ -470,15 +462,15 @@ class MediaRecorderProviderWithSileroVAD(
     }
 
     override fun recorderStatus(): StateFlow<RecorderInnerState> {
-        return _recorderStatusStateFlow
+        return MutableStateFlow(RecorderInnerState(recorderState ?: RecorderState.STOP))
     }
 
     override fun recorderTimeElapsed(): StateFlow<RecorderProgress> {
-        return _recorderTimeElapsedStateFlow
+        return MutableStateFlow(RecorderProgress(0))
     }
 
     override fun recorderMetrics(): StateFlow<RecorderMetrics> {
-        return _recorderMetricsFlow
+        return MutableStateFlow(RecorderMetrics(0))
     }
 
     override fun releaseRecorder() {

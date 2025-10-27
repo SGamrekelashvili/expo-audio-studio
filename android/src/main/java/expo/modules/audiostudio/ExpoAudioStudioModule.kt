@@ -132,15 +132,9 @@ class ExpoAudioStudioModule : Module() {
           return false
       }
 
-      val listener = audioFocusChangeListener
-      if (listener == null) {
-          Log.e("ExpoAudioStudioModule", "Audio focus listener not initialized")
-          return false
-      }
-
       val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
           val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-              .setOnAudioFocusChangeListener(listener)
+              .setOnAudioFocusChangeListener(audioFocusChangeListener)
               .build()
 
           audioFocusRequest = focusRequest
@@ -148,7 +142,7 @@ class ExpoAudioStudioModule : Module() {
       } else {
           @Suppress("DEPRECATION")
           audioManager!!.requestAudioFocus(
-              listener,
+              audioFocusChangeListener,
               AudioManager.STREAM_MUSIC,
               AudioManager.AUDIOFOCUS_GAIN
           )
@@ -164,7 +158,7 @@ class ExpoAudioStudioModule : Module() {
           audioFocusRequest?.let { audioManager!!.abandonAudioFocusRequest(it) }
       } else {
           @Suppress("DEPRECATION")
-          audioFocusChangeListener?.let { audioManager!!.abandonAudioFocus(it) }
+          audioManager!!.abandonAudioFocus(audioFocusChangeListener)
       }
   }
 
@@ -853,10 +847,6 @@ class ExpoAudioStudioModule : Module() {
         configureAudioSessionAsync(config)
     }
 
-    AsyncFunction("activateAudioSession") {
-        activateAudioSessionAsync()
-    }
-
     AsyncFunction("deactivateAudioSession") {
         deactivateAudioSessionAsync()
     }
@@ -884,14 +874,6 @@ class ExpoAudioStudioModule : Module() {
     } catch (e: Exception) {
         Log.e("ExpoAudioStudioModule", "Error configuring audio session: ${e.message}")
         throw Exception("Failed to configure audio session: ${e.message}")
-    }
-  }
-
-  private fun activateAudioSessionAsync() {
-    try {
-    } catch (e: Exception) {
-        Log.e("ExpoAudioStudioModule", "Error activating audio session: ${e.message}")
-        throw Exception("Failed to activate audio session: ${e.message}")
     }
   }
 
