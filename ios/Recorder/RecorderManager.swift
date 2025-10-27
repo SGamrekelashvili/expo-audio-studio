@@ -198,7 +198,7 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 guard let self = self else { return }
                 
-                let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+                let timer = Timer(timeInterval: self.amplitudeUpdateInterval, repeats: true) { [weak self] _ in
                     self?.updateRecorderMeters()
                 }
                 RunLoop.main.add(timer, forMode: .common)

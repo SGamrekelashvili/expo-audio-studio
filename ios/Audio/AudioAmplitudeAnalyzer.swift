@@ -1,6 +1,5 @@
 import Foundation
 import AVFoundation
-import Accelerate
 
 class AudioAmplitudeAnalyzer {
     
@@ -306,60 +305,6 @@ class AudioAmplitudeAnalyzer {
         
         let sampleCount = length / 2
         return Array(UnsafeBufferPointer(start: data, count: sampleCount))
-    }
-    
-    private static func calculateAmplitudes(samples: [Int16], barsCount: Int) -> [Float] {
-        let totalSamples = samples.count
-        let samplesPerBar = totalSamples / barsCount
-        
-        guard samplesPerBar > 0 else {
-            return samples.map { abs(Float($0)) / Float(Int16.max) }
-        }
-        
-        var amplitudes: [Float] = []
-        amplitudes.reserveCapacity(barsCount)
-        
-        print("[\(Date())] Calculating amplitudes: \(totalSamples) samples -> \(barsCount) bars (\(samplesPerBar) samples per bar)")
-        
-        for barIndex in 0..<barsCount {
-            let startIndex = barIndex * samplesPerBar
-            let endIndex = min(startIndex + samplesPerBar, totalSamples)
-            
-            if startIndex >= totalSamples {
-                amplitudes.append(0.0)
-                continue
-            }
-            
-            let barSamples = Array(samples[startIndex..<endIndex])
-            let rmsAmplitude = calculateRMSAmplitude(samples: barSamples)
-            
-            amplitudes.append(rmsAmplitude)
-        }
-        
-        // Normalize amplitudes to 0.0-1.0 range
-        let maxAmplitude = amplitudes.max() ?? 1.0
-        if maxAmplitude > 0 {
-            for i in 0..<amplitudes.count {
-                amplitudes[i] = amplitudes[i] / maxAmplitude
-            }
-        }
-        
-        return amplitudes
-    }
-    
-    private static func calculateRMSAmplitude(samples: [Int16]) -> Float {
-        guard !samples.isEmpty else { return 0.0 }
-        
-        let floatSamples = samples.map { Float($0) / Float(Int16.max) }
-        
-        var rms: Float = 0.0
-        var sumOfSquares: Float = 0.0
-        
-        // Use vDSP for vectorized operations
-        vDSP_svesq(floatSamples, 1, &sumOfSquares, vDSP_Length(floatSamples.count))
-        rms = sqrt(sumOfSquares / Float(floatSamples.count))
-        
-        return rms
     }
     
     // MARK: - Memory Management
