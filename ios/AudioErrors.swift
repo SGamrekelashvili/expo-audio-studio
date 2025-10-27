@@ -1,6 +1,5 @@
 import ExpoModulesCore
 
-// Define custom errors for better error handling on the JavaScript side
 internal final class RecordingFailedException: Exception {
   override var reason: String {
     "Recording failed to start."

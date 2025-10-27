@@ -24,26 +24,21 @@ import expo.modules.kotlin.Promise
 import java.io.File
 
 class ExpoAudioStudioModule : Module() {
-  // MEMORY FIX: Use lazy initialization to avoid creating heavy objects when idle
   private var audioRecorderProvider: AudioRecorderProvider? = null
   private var audioPlayerProvider: AudioPlayerProvider? = null
   private var utilProvider: UtilProvider? = null
   private var lastRecordingOutput=""
   private var wasPlayingBeforeInterruption: Boolean = false
-  private var wasRecordingBeforeInterruption: Boolean = false
   private var audioManager: AudioManager? = null
   private var audioFocusRequest: AudioFocusRequest? = null
   private var isVADEnabledFromJS = false
 
-  // Audio focus change listener - KOTLIN FIX: Use explicit object instead of lambda
   private val audioFocusChangeListener = object : AudioManager.OnAudioFocusChangeListener {
       override fun onAudioFocusChange(focusChange: Int) {
           when (focusChange) {
               AudioManager.AUDIOFOCUS_LOSS,
               AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                  // Save state and pause audio (only if providers exist)
                   wasPlayingBeforeInterruption = audioPlayerProvider?.isPlaying() ?: false
-                  wasRecordingBeforeInterruption = audioRecorderProvider?.isRecording() ?: false
 
                   if (wasPlayingBeforeInterruption) {
                       audioPlayerProvider?.pausePlaying()
@@ -55,13 +50,8 @@ class ExpoAudioStudioModule : Module() {
                           )
                       )
                   }
-
-                  if (wasRecordingBeforeInterruption) {
-                      // Optional: handle pausing recording if needed
-                  }
               }
               AudioManager.AUDIOFOCUS_GAIN -> {
-                  // Resume audio if it was playing before
                   if (wasPlayingBeforeInterruption) {
                       audioPlayerProvider?.resumePlaying()
                       sendEvent(
@@ -73,10 +63,6 @@ class ExpoAudioStudioModule : Module() {
                       )
                       wasPlayingBeforeInterruption = false
                   }
-
-                  if (wasRecordingBeforeInterruption) {
-                      // Optional: handle resuming recording if needed
-                  }
               }
           }
       }
@@ -85,7 +71,6 @@ class ExpoAudioStudioModule : Module() {
   private val context
       get() = requireNotNull(appContext.reactContext)
 
-  // MEMORY FIX: Lazy initialization methods to create objects only when needed
   private fun getAudioRecorderProvider(): AudioRecorderProvider {
     if (audioRecorderProvider == null) {
       val sendStatusEvent: (Map<String, Any>) -> Unit = { result ->
@@ -154,7 +139,6 @@ class ExpoAudioStudioModule : Module() {
       }
 
       val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-          // For Android Oreo and above, use the new audio focus API
           val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
               .setOnAudioFocusChangeListener(listener)
               .build()
@@ -162,7 +146,6 @@ class ExpoAudioStudioModule : Module() {
           audioFocusRequest = focusRequest
           audioManager!!.requestAudioFocus(focusRequest)
       } else {
-          // For older Android versions
           @Suppress("DEPRECATION")
           audioManager!!.requestAudioFocus(
               listener,
@@ -186,24 +169,16 @@ class ExpoAudioStudioModule : Module() {
   }
 
 
-  // Each module class must implement the definition function. The definition consists of components
-  // that describes the module's functionality and behavior.
-  // See https://docs.expo.dev/modules/module-api for more details about available components.
+  
   override fun definition() = ModuleDefinition {
-    // Sets the name of the module that JavaScript code will use to refer to the module. Takes a string as an argument.
-    // Can be inferred from module's class name, but it's recommended to set it explicitly for clarity.
-    // The module will be accessible from `requireNativeModule('ExpoAudioStudio')` in JavaScript.
     Name("ExpoAudioStudio")
     Events("onPlayerStatusChange","onRecorderStatusChange","onRecorderAmplitude","onVoiceActivityDetected")
 
     OnCreate {
-        // MEMORY FIX: Only initialize lightweight objects, heavy objects created lazily
-        // Initialize audio manager for handling audio focus
         audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
 
     OnDestroy {
-        // MEMORY FIX: Clean up resources only if they were created
         try {
             audioPlayerProvider?.let {
                 it.stopPlaying()
@@ -214,7 +189,6 @@ class ExpoAudioStudioModule : Module() {
                 it.releaseRecorder()
             }
 
-            // Abandon audio focus if needed
             abandonAudioFocus()
         } catch (e: Exception) {
             Log.e("ExpoAudioStudioModule", "Error during cleanup: ${e.message}")
@@ -227,8 +201,6 @@ class ExpoAudioStudioModule : Module() {
         val success = getAudioPlayerProvider().preparePlayer(url){ result ->
             val isPlaying = result["isPlaying"] ?: false
             val didJustFinish = result["didJustFinish"] ?: false
-
-            Log.d("ExpoAudioStudioModule", "Prepare result - Is playing: $isPlaying, Ended by itself: $didJustFinish")
 
             this@ExpoAudioStudioModule.sendEvent(
                 "onPlayerStatusChange",
@@ -245,13 +217,10 @@ class ExpoAudioStudioModule : Module() {
       }
 
       Function("startPlaying") { url: String ->
-        // Request audio focus before playing
         if (requestAudioFocus()) {
             val success = getAudioPlayerProvider().startPlaying(url){ result ->
                 val isPlaying = result["isPlaying"] ?: false
                 val didJustFinish = result["didJustFinish"] ?: false
-
-                Log.d("ExpoAudioStudioModule", "Is playing: $isPlaying, Ended by itself: $didJustFinish")
 
                 this@ExpoAudioStudioModule.sendEvent(
                     "onPlayerStatusChange",
@@ -326,47 +295,27 @@ class ExpoAudioStudioModule : Module() {
         }
     }
 
-      Property("isRecording") {
-          audioRecorderProvider?.isRecording() ?: false
-      }
-
-      Property("isPaused") {
-          audioRecorderProvider?.isPaused() ?: false
-      }
-
-
       Function("setAmplitudeUpdateFrequency") { frequencyHz: Double ->
         try {
-            Log.d("ExpoAudioStudioModule", "setAmplitudeUpdateFrequency called with $frequencyHz Hz")
-            
-            // Cast to the correct provider type and set frequency
             when (val provider = audioRecorderProvider) {
                 is MediaRecorderProviderWithSileroVAD -> {
                     provider.setAmplitudeUpdateFrequency(frequencyHz)
                 }
-                else -> {
-                    Log.w("ExpoAudioStudioModule", "Current recorder provider does not support configurable amplitude frequency")
-                }
             }
-            
             return@Function "Amplitude frequency set to $frequencyHz Hz"
         } catch (e: Exception) {
-            Log.e("ExpoAudioStudioModule", "Error setting amplitude frequency: ${e.message}")
             return@Function "Error: ${e.message}"
         }
     }
     
     Function("startRecording") { directoryPath: String? ->
-        // Stop any playback first
         audioPlayerProvider?.stopPlaying()
 
-        // Generate a unique filename with timestamp
+
         val timestamp = System.currentTimeMillis()
         val fileName = "recording_${timestamp}.wav"
         
-        // Use custom directory if provided, otherwise use default cache location
         lastRecordingOutput = if (!directoryPath.isNullOrEmpty()) {
-            // Remove file:// prefix if present and ensure directory exists
             val cleanPath = directoryPath.replace("file://", "")
             val directory = File(cleanPath)
             if (!directory.exists()) {
@@ -377,23 +326,20 @@ class ExpoAudioStudioModule : Module() {
             getUtilProvider().fileCacheLocationFullPath(context, fileName)
         }
 
-        // Request audio focus for recording
         if (requestAudioFocus()) {
             val success = getAudioRecorderProvider().startRecording(context, RecordArgument(
                 outputFile = lastRecordingOutput,
             ))
 
             if (success) {
-                wasRecordingBeforeInterruption = true
-                
-                // Auto-start VAD if enabled
                 if (isVADEnabledFromJS) {
-                    Log.d("ExpoAudioStudioModule", "Auto-starting VAD because recording started and VAD is enabled")
                     try {
-                        val vadResult = getAudioRecorderProvider().startVoiceActivityDetection()
-                        Log.d("ExpoAudioStudioModule", "VAD auto-start result: $vadResult")
+                        val provider = getAudioRecorderProvider()
+                        if (provider is MediaRecorderProviderWithSileroVAD) {
+                            provider.requestAutoStartVAD()
+                        }
                     } catch (e: Exception) {
-                        Log.e("ExpoAudioStudioModule", "Error auto-starting VAD: ${e.message}")
+                        Log.e("ExpoAudioStudioModule", "VAD auto-start failed: ${e.message}")
                     }
                 }
                 
@@ -406,21 +352,16 @@ class ExpoAudioStudioModule : Module() {
     }
 
     Function("stopRecording"){
-        // Auto-stop VAD if it was running
         try {
-            val vadActive = getAudioRecorderProvider().isVoiceActivityDetectionActive()
-            if (vadActive) {
-                Log.d("ExpoAudioStudioModule", "Auto-stopping VAD because recording stopped")
-                val vadResult = getAudioRecorderProvider().stopVoiceActivityDetection()
-                Log.d("ExpoAudioStudioModule", "VAD auto-stop result: $vadResult")
+            if (getAudioRecorderProvider().isVoiceActivityDetectionActive()) {
+                getAudioRecorderProvider().stopVoiceActivityDetection()
             }
         } catch (e: Exception) {
-            Log.e("ExpoAudioStudioModule", "Error auto-stopping VAD: ${e.message}")
+            Log.e("ExpoAudioStudioModule", "VAD stop failed: ${e.message}")
         }
         
         val success = getAudioRecorderProvider().stopRecording()
         abandonAudioFocus()
-        wasRecordingBeforeInterruption = false
 
         if (success) {
             return@Function lastRecordingOutput
@@ -433,13 +374,6 @@ class ExpoAudioStudioModule : Module() {
             val success = getAudioRecorderProvider().pauseRecording()
             
             if (success) {
-                // Send status update on main thread
-                Handler(Looper.getMainLooper()).post {
-                    sendEvent(
-                        "onRecorderStatusChange",
-                        bundleOf("status" to "paused")
-                    )
-                }
                 return@Function "paused"
             }
             return@Function "NoRecorderException"
@@ -454,13 +388,20 @@ class ExpoAudioStudioModule : Module() {
             val success = getAudioRecorderProvider().resumeRecording()
             
             if (success) {
-                // Send status update on main thread
-                Handler(Looper.getMainLooper()).post {
-                    sendEvent(
-                        "onRecorderStatusChange",
-                        bundleOf("status" to "recording")
-                    )
+                if (isVADEnabledFromJS) {
+                    val vadActive = getAudioRecorderProvider().isVoiceActivityDetectionActive()
+                    if (!vadActive) {
+                        try {
+                            val provider = getAudioRecorderProvider()
+                            if (provider is MediaRecorderProviderWithSileroVAD) {
+                                provider.requestAutoStartVAD()
+                            }
+                        } catch (e: Exception) {
+                            Log.e("ExpoAudioStudioModule", "VAD auto-start failed: ${e.message}")
+                        }
+                    }
                 }
+                
                 return@Function "resumed"
             }
             return@Function "NoRecorderException"
@@ -477,15 +418,12 @@ class ExpoAudioStudioModule : Module() {
         return@Function null
     }
 
-    // MARK: - File Management Functions
     Function("listRecordings") { directoryPath: String? ->
         try {
             val directory = if (!directoryPath.isNullOrEmpty()) {
-                // Remove file:// prefix if present
                 val cleanPath = directoryPath.replace("file://", "")
                 File(cleanPath)
             } else {
-                // Use default cache directory
                 context.cacheDir
             }
 
@@ -518,18 +456,13 @@ class ExpoAudioStudioModule : Module() {
 
     Function("joinAudioFiles") { filePaths: List<String>, outputPath: String ->
         try {
-            Log.d("ExpoAudioStudioModule", "Starting joinAudioFiles with ${filePaths.size} files")
-            
             if (filePaths.size < 2) {
                 return@Function "Error: At least 2 audio files are required for joining"
             }
 
-            // Validate input files exist and are WAV files
             val inputFiles = filePaths.mapIndexed { index, path ->
                 val cleanPath = path.replace("file://", "")
                 val file = File(cleanPath)
-                
-                Log.d("ExpoAudioStudioModule", "Checking file $index: $cleanPath")
                 
                 if (!file.exists()) {
                     return@Function "Error: Input file not found: $cleanPath"
@@ -539,64 +472,46 @@ class ExpoAudioStudioModule : Module() {
                     return@Function "Error: Only WAV files are supported for joining. File: ${file.name}"
                 }
                 
-                Log.d("ExpoAudioStudioModule", "File $index validated: ${file.length()} bytes")
                 file
             }
 
-            // Prepare output file
             val cleanOutputPath = outputPath.replace("file://", "")
             val outputFile = File(cleanOutputPath)
             outputFile.parentFile?.mkdirs()
             
-            // Delete existing output file if it exists
             if (outputFile.exists()) {
                 outputFile.delete()
-                Log.d("ExpoAudioStudioModule", "Deleted existing output file")
             }
-
-            Log.d("ExpoAudioStudioModule", "Starting WAV file concatenation")
             
-            // Read first file to get WAV header information
             val firstFileBytes = inputFiles[0].readBytes()
             if (firstFileBytes.size < 44) {
                 return@Function "Error: First file is too small to be a valid WAV file"
             }
             
-            // Validate WAV header
             val riffHeader = String(firstFileBytes.sliceArray(0..3))
             val waveHeader = String(firstFileBytes.sliceArray(8..11))
             
             if (riffHeader != "RIFF" || waveHeader != "WAVE") {
                 return@Function "Error: First file is not a valid WAV file"
             }
-            
-            Log.d("ExpoAudioStudioModule", "WAV header validated")
 
-            // Create output stream and write combined audio
             val outputStream = outputFile.outputStream().buffered()
             var totalAudioDataSize = 0L
             
             try {
-                // Write WAV header from first file (we'll update sizes later)
                 outputStream.write(firstFileBytes, 0, 44)
                 
-                // Write audio data from all files
                 for ((index, inputFile) in inputFiles.withIndex()) {
-                    Log.d("ExpoAudioStudioModule", "Processing file $index: ${inputFile.name}")
-                    
                     val fileBytes = inputFile.readBytes()
                     
                     if (fileBytes.size < 44) {
-                        Log.w("ExpoAudioStudioModule", "Skipping file $index: too small")
                         continue
                     }
                     
-                    // Extract audio data (skip 44-byte header)
                     val audioDataSize = fileBytes.size - 44
                     if (audioDataSize > 0) {
                         outputStream.write(fileBytes, 44, audioDataSize)
                         totalAudioDataSize += audioDataSize
-                        Log.d("ExpoAudioStudioModule", "Added ${audioDataSize} bytes from file $index")
                     }
                 }
                 
@@ -604,14 +519,8 @@ class ExpoAudioStudioModule : Module() {
             } finally {
                 outputStream.close()
             }
-            
-            Log.d("ExpoAudioStudioModule", "Total audio data written: $totalAudioDataSize bytes")
 
-            // Update WAV header with correct file sizes
             updateWavHeader(outputFile, totalAudioDataSize)
-            
-            val finalSize = outputFile.length()
-            Log.d("ExpoAudioStudioModule", "Final joined file size: $finalSize bytes")
 
             return@Function outputFile.absolutePath
         } catch (e: Exception) {
@@ -619,9 +528,6 @@ class ExpoAudioStudioModule : Module() {
             return@Function "Error: ${e.message}"
         }
     }
-
-    // MARK: - Voice Activity Detection Functions
-
 
     Function("setVoiceActivityThreshold") { threshold: Float ->
         try {
@@ -635,14 +541,10 @@ class ExpoAudioStudioModule : Module() {
 
     Function("setVADEnabled") { enabled: Boolean ->
         try {
-            Log.d("ExpoAudioStudioModule", "setVADEnabled called with enabled: $enabled")
-            
             if (enabled) {
-                // Set VAD preference
                 isVADEnabledFromJS = true
                 val provider = getAudioRecorderProvider()
                 
-                // If recording is active, start VAD immediately
                 if (provider.isRecording()) {
                     val result = provider.startVoiceActivityDetection()
                     return@Function "VAD enabled and started: $result"
@@ -650,7 +552,6 @@ class ExpoAudioStudioModule : Module() {
                     return@Function "VAD enabled: Will auto-start with next recording"
                 }
             } else {
-                // Disable VAD preference and stop if active
                 isVADEnabledFromJS = false
                 val result = getAudioRecorderProvider().stopVoiceActivityDetection()
                 return@Function "VAD disabled: $result"
@@ -661,36 +562,31 @@ class ExpoAudioStudioModule : Module() {
         }
     }
 
-    Property("isVADActive") {
-        try {
-            return@Property getAudioRecorderProvider().isVoiceActivityDetectionActive()
-        } catch (e: Exception) {
-            Log.e("ExpoAudioStudioModule", "Error checking VAD active status: ${e.message}")
-            return@Property false
-        }
+    Property("isVADEnabled") {
+        isVADEnabledFromJS
     }
     
-    Property("isVADEnabled") {
+    Function("setVADEventMode") { mode: String, throttleMs: Int? ->
         try {
-            return@Property isVADEnabledFromJS
+            val provider = getAudioRecorderProvider()
+            if (provider is MediaRecorderProviderWithSileroVAD) {
+                val result = provider.setVADEventMode(mode, throttleMs ?: 100)
+                return@Function result
+            } else {
+                return@Function "Error: Current recorder provider does not support VAD event mode"
+            }
         } catch (e: Exception) {
-            Log.e("ExpoAudioStudioModule", "Error checking VAD enabled status: ${e.message}")
-            return@Property false
+            Log.e("ExpoAudioStudioModule", "Error setting VAD event mode: ${e.message}")
+            return@Function "Error: ${e.message}"
         }
     }
 
-    Property("isVoiceActivityDetectionActive") {
-        try {
-            return@Property getAudioRecorderProvider().isVoiceActivityDetectionActive()
-        } catch (e: Exception) {
-            Log.e("ExpoAudioStudioModule", "Error checking VAD status: ${e.message}")
-            return@Property false
-        }
+    Property("isVADActive") {
+        getAudioRecorderProvider().isVoiceActivityDetectionActive()
     }
 
       Property("playerStatus") {
         val playerStatus = getAudioPlayerProvider().playerStatus()
-        Log.d("ExpoAudioStudioModule", "Player status: $playerStatus")
 
         if (playerStatus != null) {
             mapOf(
@@ -709,17 +605,15 @@ class ExpoAudioStudioModule : Module() {
         }
     }
 
-    // Audio information properties and functions
       Property("currentPosition") {
-        // Get the current position directly from the player for maximum accuracy
         val currentPosition = getAudioPlayerProvider().getCurrentPosition()
-        currentPosition.toDouble() / 1000.0 // Convert ms to seconds
+        currentPosition.toDouble() / 1000.0
     }
 
     Function("getDuration") { uri: String ->
         try {
             val duration = getAudioPlayerProvider().getAudioDuration(uri, context)
-            return@Function duration.toDouble() / 1000.0  // Convert ms to seconds
+            return@Function duration.toDouble() / 1000.0
         } catch (e: Exception) {
             Log.e("ExpoAudioStudioModule", "Error getting duration: ${e.message}")
             return@Function 0.0
@@ -728,13 +622,9 @@ class ExpoAudioStudioModule : Module() {
 
     Function("getAudioAmplitudes") { fileUrl: String, barsCount: Int ->
         try {
-            Log.d("ExpoAudioStudioModule", "getAudioAmplitudes called for fileUrl: $fileUrl, barsCount: $barsCount")
-            
-            // MEMORY OPTIMIZED: Use object (singleton) instead of creating new instance
             val result = AudioAmplitudeAnalyzer.getAudioAmplitudes(context, fileUrl, barsCount)
 
             if (result.success) {
-                Log.d("ExpoAudioStudioModule", "Successfully analyzed audio - ${result.amplitudes.size} bars, duration: ${result.duration}s")
                 return@Function mapOf(
                     "success" to true,
                     "amplitudes" to result.amplitudes.toList(),
@@ -743,7 +633,6 @@ class ExpoAudioStudioModule : Module() {
                     "barsCount" to result.amplitudes.size
                 )
             } else {
-                Log.e("ExpoAudioStudioModule", "Analysis failed - ${result.error}")
                 return@Function mapOf(
                     "success" to false,
                     "error" to (result.error ?: "Unknown error"),
@@ -765,7 +654,6 @@ class ExpoAudioStudioModule : Module() {
     }
 
     Property("meterLevel") {
-        // Get current amplitude level from recorder
         val amplitude = audioRecorderProvider?.getCurrentAmplitude() ?: -160.0f
         amplitude
     }
@@ -775,7 +663,6 @@ class ExpoAudioStudioModule : Module() {
         try {
             val speedFloat = speedString.toFloat()
 
-            // Validate speed range
             if (speedFloat in 0.5f..2.0f) {
                 val success = getAudioPlayerProvider().setPlaybackSpeed(speedString)
                 if (success) {
@@ -783,7 +670,6 @@ class ExpoAudioStudioModule : Module() {
                 }
                 return@Function "SetSpeedException: Failed to set speed"
             } else {
-                Log.d("ExpoAudioStudioModule", "setPlaybackSpeed: Speed out of range.")
                 return@Function "SetSpeedException: Speed out of range (0.5-2.0)"
             }
         } catch (e: NumberFormatException) {
@@ -800,7 +686,6 @@ class ExpoAudioStudioModule : Module() {
         return@Function "SeekException: Failed to seek"
     }
 
-    // Permission Handling Functions
     AsyncFunction("requestMicrophonePermission") { promise: Promise ->
         try {
             // For pre-Marshmallow devices, permissions are granted at install time
@@ -827,7 +712,6 @@ class ExpoAudioStudioModule : Module() {
                 return@AsyncFunction
             }
 
-            // Check if we already have permission
             val currentStatus = ContextCompat.checkSelfPermission(context, permission)
             if (currentStatus == PackageManager.PERMISSION_GRANTED) {
                 val response = mapOf(
@@ -839,7 +723,6 @@ class ExpoAudioStudioModule : Module() {
                 return@AsyncFunction
             }
 
-            // Mark that we're about to request permissions
             val prefs = context.getSharedPreferences("expo.modules.audiostudio.permissions", Context.MODE_PRIVATE)
             prefs.edit().putBoolean("has_asked_for_microphone", true).apply()
 
@@ -994,31 +877,9 @@ class ExpoAudioStudioModule : Module() {
         val options = config["options"] as? Map<String, Boolean> ?: emptyMap()
         
         // Configure audio focus based on category and options
-        when (category) {
-            "ambient", "soloAmbient" -> {
-                // For ambient categories, don't request audio focus
-                Log.d("ExpoAudioStudioModule", "Audio session configured for ambient playback")
-            }
-            "playback" -> {
-                // For playback, we'll handle audio focus in the player
-                Log.d("ExpoAudioStudioModule", "Audio session configured for playback")
-            }
-            "record", "playAndRecord" -> {
-                // For recording, ensure we can record
-                Log.d("ExpoAudioStudioModule", "Audio session configured for recording")
-            }
-            else -> {
-                Log.w("ExpoAudioStudioModule", "Unknown audio session category: $category")
-            }
-        }
-        
-        // Handle options
         if (options["defaultToSpeaker"] == true) {
             audioManager.isSpeakerphoneOn = true
-            Log.d("ExpoAudioStudioModule", "Audio session configured to use speaker")
         }
-        
-        Log.d("ExpoAudioStudioModule", "Audio session configured successfully")
         
     } catch (e: Exception) {
         Log.e("ExpoAudioStudioModule", "Error configuring audio session: ${e.message}")
@@ -1028,9 +889,6 @@ class ExpoAudioStudioModule : Module() {
 
   private fun activateAudioSessionAsync() {
     try {
-        // On Android, audio session activation is handled automatically by the system
-        // We can ensure audio focus is properly managed in our audio components
-        Log.d("ExpoAudioStudioModule", "Audio session activated (Android handles this automatically)")
     } catch (e: Exception) {
         Log.e("ExpoAudioStudioModule", "Error activating audio session: ${e.message}")
         throw Exception("Failed to activate audio session: ${e.message}")
@@ -1041,13 +899,7 @@ class ExpoAudioStudioModule : Module() {
     try {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         
-        // Release any audio focus we might have
-        // This will be handled by individual audio components
-        
-        // Reset speaker phone if it was enabled
         audioManager.isSpeakerphoneOn = false
-        
-        Log.d("ExpoAudioStudioModule", "Audio session deactivated")
     } catch (e: Exception) {
         Log.e("ExpoAudioStudioModule", "Error deactivating audio session: ${e.message}")
         throw Exception("Failed to deactivate audio session: ${e.message}")
@@ -1058,8 +910,6 @@ class ExpoAudioStudioModule : Module() {
   private fun updateWavHeader(file: File, dataSize: Long) {
     try {
       val randomAccessFile = java.io.RandomAccessFile(file, "rw")
-      
-      Log.d("ExpoAudioStudioModule", "Updating WAV header with data size: $dataSize")
       
       // Read and verify RIFF header
       randomAccessFile.seek(0)
@@ -1075,11 +925,9 @@ class ExpoAudioStudioModule : Module() {
       
       // Update file size in RIFF header (bytes 4-7)
       // Total file size = data size + header size - 8 (RIFF chunk size doesn't include first 8 bytes)
-      val totalFileSize = dataSize + 36 // 44 byte header - 8 bytes for RIFF header
+      val totalFileSize = dataSize + 36
       randomAccessFile.seek(4)
       randomAccessFile.writeInt(Integer.reverseBytes(totalFileSize.toInt()))
-      
-      Log.d("ExpoAudioStudioModule", "Updated RIFF chunk size to: $totalFileSize")
       
       // Find the data chunk by searching through the file
       randomAccessFile.seek(12) // Skip RIFF header and WAVE identifier
@@ -1094,11 +942,8 @@ class ExpoAudioStudioModule : Module() {
         randomAccessFile.read(chunkSizeBytes)
         val chunkSize = java.nio.ByteBuffer.wrap(chunkSizeBytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).int
         
-        Log.d("ExpoAudioStudioModule", "Found chunk: $chunkIdString, size: $chunkSize")
-        
         if (chunkIdString == "data") {
-          dataChunkPosition = randomAccessFile.filePointer - 4 // Position of chunk size
-          Log.d("ExpoAudioStudioModule", "Found data chunk at position: $dataChunkPosition")
+          dataChunkPosition = randomAccessFile.filePointer - 4
           break
         } else {
           // Skip this chunk
@@ -1107,16 +952,13 @@ class ExpoAudioStudioModule : Module() {
       }
       
       if (dataChunkPosition != -1L) {
-        // Update data chunk size
         randomAccessFile.seek(dataChunkPosition)
         randomAccessFile.writeInt(Integer.reverseBytes(dataSize.toInt()))
-        Log.d("ExpoAudioStudioModule", "Updated data chunk size to: $dataSize")
       } else {
         Log.e("ExpoAudioStudioModule", "Could not find data chunk in WAV file")
       }
       
       randomAccessFile.close()
-      Log.d("ExpoAudioStudioModule", "WAV header update completed")
       
     } catch (e: Exception) {
       Log.e("ExpoAudioStudioModule", "Error updating WAV header: ${e.message}", e)

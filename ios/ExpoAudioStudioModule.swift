@@ -93,13 +93,9 @@ public class ExpoAudioStudioModule: Module {
         ])
     }
     
-    private func sendVoiceActivityEvent(isVoiceDetected: Bool, confidence: Float) {
-        print("[\(Date())] sendVoiceActivityEvent: isVoiceDetected=\(isVoiceDetected), confidence=\(confidence)")
-        sendEvent("onVoiceActivityDetected", [
-            "isVoiceDetected": isVoiceDetected,
-            "confidence": confidence,
-            "timestamp": Date().timeIntervalSince1970 * 1000 // Convert to milliseconds
-        ])
+    private func sendVoiceActivityEvent(_ event: [String: Any]) {
+        print("[\(Date())] sendVoiceActivityEvent: \(event)")
+        sendEvent("onVoiceActivityDetected", event)
     }
 
     private func setupNotificationObservers() {
@@ -406,8 +402,8 @@ public class ExpoAudioStudioModule: Module {
                     if status == "recording" && self.isVADEnabledFromJS {
                         if #available(iOS 13.0, *) {
                             print("[\(Date())] Auto-starting VAD because recording started and VAD is enabled")
-                            let vadResult = self.getSoundClassificationManager().startVoiceActivityDetection { [weak self] isVoiceDetected, confidence in
-                                self?.sendVoiceActivityEvent(isVoiceDetected: isVoiceDetected, confidence: confidence)
+                            let vadResult = self.getSoundClassificationManager().startVoiceActivityDetection { [weak self] event in
+                                self?.sendVoiceActivityEvent(event)
                             }
                             print("[\(Date())] VAD auto-start result: \(vadResult)")
                         }
@@ -636,7 +632,6 @@ public class ExpoAudioStudioModule: Module {
                 ]
             }
             
-            // MEMORY OPTIMIZED: Use autoreleasepool for large file processing
             let result = autoreleasepool { () -> AudioAmplitudeAnalyzer.AmplitudeResult in
                 return AudioAmplitudeAnalyzer.getAudioAmplitudes(fileUrl: audioURL, barsCount: barsCount)
             }
@@ -644,8 +639,7 @@ public class ExpoAudioStudioModule: Module {
             if result.success {
                 print("[\(Date())] getAudioAmplitudes: Successfully analyzed audio - \(result.amplitudes.count) bars, duration: \(result.duration)s")
                 
-                // Force memory cleanup for large files
-                if result.duration > 60.0 { // Files longer than 1 minute
+                if result.duration > 60.0 {
                     AudioAmplitudeAnalyzer.forceMemoryCleanup()
                 }
                 
@@ -732,8 +726,8 @@ public class ExpoAudioStudioModule: Module {
                     // If recording is active, start VAD immediately
                     let isRecording = self.recorderManager.getRecorder()?.isRecording ?? false
                     if isRecording {
-                        let result = self.getSoundClassificationManager().startVoiceActivityDetection { [weak self] isVoiceDetected, confidence in
-                            self?.sendVoiceActivityEvent(isVoiceDetected: isVoiceDetected, confidence: confidence)
+                        let result = self.getSoundClassificationManager().startVoiceActivityDetection { [weak self] event in
+                            self?.sendVoiceActivityEvent(event)
                         }
                         return "VAD enabled and started: \(result)"
                     } else {
@@ -760,6 +754,21 @@ public class ExpoAudioStudioModule: Module {
         
         Property("isVADEnabled") {
             return self.isVADEnabledFromJS
+        }
+        
+        Function("setVADEventMode") { (mode: String, throttleMs: Int?) -> String in
+            if #available(iOS 13.0, *) {
+                let manager = self.getSoundClassificationManager()
+                manager.vadEventMode = mode
+                
+                if let throttle = throttleMs, mode == "throttled" {
+                    manager.vadThrottleMs = throttle
+                }
+                
+                return "VAD event mode set to: \(mode)" + (throttleMs != nil ? " with \(throttleMs!)ms throttle" : "")
+            } else {
+                return "UnsupportedIOSVersion: Voice activity detection requires iOS 13.0 or later"
+            }
         }
         
         Property("isVoiceActivityDetectionActive") {

@@ -10,9 +10,16 @@ class EnhancedSoundClassificationManager: NSObject {
     private var soundClassifier: SNClassifySoundRequest?
     
     private var isAnalyzing = false
-    private var voiceActivityCallback: ((Bool, Float) -> Void)?
+    private var voiceActivityCallback: (([String: Any]) -> Void)?
     
-    // Configuration
+    private var lastVoiceState: Bool = false
+    private var speechStartTime: TimeInterval = 0
+    private var silenceStartTime: TimeInterval = 0
+    
+    public var vadEventMode: String = "onEveryFrame"
+    public var vadThrottleMs: Int = 100
+    private var lastEventTime: TimeInterval = 0
+    
     public var voiceConfidenceThreshold: Float = 0.5
     public var windowDuration: Double = 1.5
     public var overlapFactor: Float = 0.9
@@ -24,7 +31,7 @@ class EnhancedSoundClassificationManager: NSObject {
         "speech_synthesizer", "voice", "talk", "speaking"
     ]
     
-    func startVoiceActivityDetection(callback: @escaping (Bool, Float) -> Void) -> String {
+    func startVoiceActivityDetection(callback: @escaping ([String: Any]) -> Void) -> String {
         guard !isAnalyzing else {
             return "AlreadyAnalyzing"
         }
@@ -142,8 +149,60 @@ class EnhancedSoundClassificationManager: NSObject {
             }
         }
         
-        DispatchQueue.main.async {
-            callback(hasVoiceActivity, maxVoiceConfidence)
+        let currentTime = Date().timeIntervalSince1970
+        let isStateChange = hasVoiceActivity != lastVoiceState
+        
+        let shouldSendEvent: Bool
+        switch vadEventMode {
+        case "onChange":
+            shouldSendEvent = isStateChange
+        case "throttled":
+            let timeSinceLastEvent = (currentTime - lastEventTime) * 1000
+            shouldSendEvent = isStateChange || timeSinceLastEvent >= Double(vadThrottleMs)
+        default:
+            shouldSendEvent = true
+        }
+        
+        if shouldSendEvent {
+            if hasVoiceActivity {
+                speechStartTime = currentTime
+                silenceStartTime = 0
+            } else {
+                silenceStartTime = currentTime
+                speechStartTime = 0
+            }
+            
+            let stateDuration = hasVoiceActivity ? 
+                (speechStartTime > 0 ? Int((currentTime - speechStartTime) * 1000) : 0) :
+                (silenceStartTime > 0 ? Int((currentTime - silenceStartTime) * 1000) : 0)
+            
+            let eventType: String
+            if isStateChange {
+                eventType = hasVoiceActivity ? "speech_start" : "silence_start"
+            } else {
+                eventType = hasVoiceActivity ? "speech_continue" : "silence_continue"
+            }
+            
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                
+                let event: [String: Any] = [
+                    "isVoiceDetected": hasVoiceActivity,
+                    "confidence": maxVoiceConfidence,
+                    "timestamp": currentTime * 1000,
+                    "stateDuration": stateDuration,
+                    "isStateChange": true,
+                    "previousState": self.lastVoiceState,
+                    "eventType": eventType
+                ]
+                
+                callback(event)
+                
+                if isStateChange {
+                    self.lastVoiceState = hasVoiceActivity
+                }
+                self.lastEventTime = currentTime
+            }
         }
     }
 }
@@ -159,7 +218,15 @@ extension EnhancedSoundClassificationManager: SNResultsObserving {
     func request(_ request: SNRequest, didFailWithError error: Error) {
         print("❌ Sound classification request failed: \(error)")
         DispatchQueue.main.async { [weak self] in
-            self?.voiceActivityCallback?(false, 0.0)
+            let event: [String: Any] = [
+                "isVoiceDetected": false,
+                "confidence": 0.0,
+                "timestamp": Date().timeIntervalSince1970 * 1000,
+                "stateDuration": 0,
+                "isStateChange": false,
+                "eventType": "silence_continue"
+            ]
+            self?.voiceActivityCallback?(event)
         }
     }
     

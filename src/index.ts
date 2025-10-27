@@ -8,9 +8,6 @@ import {
   VoiceActivityEvent,
   AudioSessionConfig,
   AudioAmplitudeResult,
-  VADConfig,
-  VADSessionStats,
-  VADPlatformInfo,
 } from './ExpoAudioStudio.types';
 
 export type {
@@ -35,11 +32,8 @@ export type {
   RecordingStatus,
 
   // VAD types
-  VADConfig,
   VADResult,
   VADInitResult,
-  VADSessionStats,
-  VADPlatformInfo,
   VADSensitivity,
   VADMode,
 
@@ -592,81 +586,15 @@ export function setVADEnabled(enabled: boolean): string {
 }
 
 /**
- * Gets current VAD session statistics
- *
- * @returns Current session statistics or null if VAD not active
- *
- * @example
- * ```typescript
- * const stats = getVADSessionStats();
- * if (stats) {
- *   console.log(`Speech: ${stats.speechDuration}ms (${stats.speechSegments} segments)`);
- *   console.log(`Silence: ${stats.silenceDuration}ms`);
- *   console.log(`Average confidence: ${stats.averageConfidence.toFixed(2)}`);
- *   console.log(`Peak confidence: ${stats.peakConfidence.toFixed(2)}`);
- * }
- * ```
- */
-export function getVADSessionStats(): VADSessionStats | null {
-  return ExpoAudioStudioModule.getVADSessionStats();
-}
-
-/**
- * Updates VAD configuration during active session
- *
- * @param config - Partial configuration to update
- * @returns Success message or error description
- *
- * @example
- * ```typescript
- * // Change sensitivity during session
- * const result = updateVADConfig({ sensitivity: 'medium' });
- *
- * // Update multiple settings
- * const advancedResult = updateVADConfig({
- *   threshold: 0.8,
- *   minSpeechDuration: 150,
- *   eventThrottleMs: 200
- * });
- *
- * console.log('Config updated:', result);
- * ```
- */
-export function updateVADConfig(config: Partial<VADConfig>): string {
-  return ExpoAudioStudioModule.updateVADConfig(config);
-}
-
-/**
- * Gets VAD platform information and capabilities
- *
- * @returns Platform information including engine and supported features
- *
- * @example
- * ```typescript
- * const info = getVADPlatformInfo();
- * console.log(`Platform: ${info.platform}`);
- * console.log(`Engine: ${info.engine} ${info.engineVersion || ''}`);
- * console.log(`Real-time support: ${info.supportsRealTime}`);
- * ```
- */
-export function getVADPlatformInfo(): VADPlatformInfo {
-  return ExpoAudioStudioModule.getVADPlatformInfo();
-}
-
-/**
- * Sets the voice activity detection threshold (legacy method)
+ * Sets the voice activity detection threshold
  *
  * @param threshold - Detection threshold (0.0 to 1.0)
  * @returns Success message or error description
- * @deprecated Use updateVADConfig({ threshold }) instead for better control
  *
  * @example
  * ```typescript
- * // Legacy way (still supported)
  * const result = setVoiceActivityThreshold(0.7);
- *
- * // Recommended way
- * const newResult = updateVADConfig({ threshold: 0.7 });
+ * console.log(result); // "Success: Threshold set to 0.7"
  * ```
  */
 export function setVoiceActivityThreshold(threshold: number): string {

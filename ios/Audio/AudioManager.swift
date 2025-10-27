@@ -30,23 +30,18 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
                 }
             }
             
-            // PROPER CLEANUP: Stop and release old player completely
             if let existingPlayer = self.audioPlayer {
                 print("[\(Date())] preparePlayer: Properly cleaning up existing player")
                 existingPlayer.stop()
-                // existingPlayer is automatically released when audioPlayer is reassigned
             }
             
-            // Always create new player (even for same path to ensure clean state)
             audioPlayer = try AVAudioPlayer(contentsOf: audioFileURL)
             
-            // Ensure player was created
             guard let player = self.audioPlayer else {
                 sendPlayerStatusEvent(false, false)
                 return "PlaybackFailedException: Player is nil"
             }
             
-            // Set up delegate and properties
             self.playerDelegate = PlayerDelegate(delegate: self)
             player.delegate = self.playerDelegate
             player.enableRate = true
@@ -119,7 +114,7 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
 
         player.stop()
         self.audioPlayer = nil
-        return false // Indicate that stop is complete
+        return false
     }
     
     func pausePlayingAudio() -> String {
@@ -188,7 +183,6 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
         return "success"
     }
     
-    // Provide access to player for direct status checks
     func getPlayer() -> AVAudioPlayer? {
         return audioPlayer
     }
@@ -213,7 +207,6 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
     // MARK: - PlayerDelegateProtocol
     
     func playerDidFinishPlaying(successfully: Bool) {
-        // Ensure cleanup and status update happen on the main thread
         DispatchQueue.main.async { [weak self] in
             self?.onPlayerStatusChange?(false, true)
             self?.audioPlayer = nil // Clean up player instance
@@ -222,7 +215,6 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
     }
     
     func playerDecodeErrorDidOccur(error: Error?) {
-        // Ensure cleanup and status update happen on the main thread
         DispatchQueue.main.async { [weak self] in
             self?.onPlayerStatusChange?(false, false)
             self?.audioPlayer = nil
