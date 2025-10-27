@@ -1,4 +1,4 @@
-// Audio Session Types
+// Audio Session Typess
 
 /**
  * Audio session category for iOS
@@ -52,15 +52,6 @@ export type AudioSessionConfig = {
   mode?: AudioSessionMode;
   /** Audio session options */
   options?: AudioSessionOptions;
-};
-
-// Event Types
-
-/**
- * Event payload for module initialization
- */
-export type OnLoadEventPayload = {
-  url: string;
 };
 
 /**
@@ -181,22 +172,6 @@ export type PlaybackSpeed = number;
 // Recording Types
 
 /**
- * Recording configuration options
- */
-export type RecordingOptions = {
-  /** Output file format */
-  format?: 'wav' | 'm4a' | 'mp3';
-  /** Sample rate in Hz */
-  sampleRate?: 16000 | 44100 | 48000;
-  /** Number of audio channels */
-  channels?: 1 | 2;
-  /** Bit depth */
-  bitDepth?: 16 | 24;
-  /** Enable noise suppression */
-  noiseSuppression?: boolean;
-};
-
-/**
  * Recording state information
  */
 export type RecordingState = {
@@ -210,65 +185,6 @@ export type RecordingState = {
   amplitude: number;
   /** Recording duration in seconds */
   duration: number;
-};
-
-// Voice Activity Detection Types
-
-/**
- * VAD sensitivity levels for easy configuration
- */
-export type VADSensitivity = 'low' | 'medium' | 'high' | 'very_high';
-
-/**
- * VAD detection mode
- */
-export type VADMode = 'normal' | 'aggressive' | 'very_aggressive';
-
-/**
- * VAD detection result with comprehensive information
- */
-export type VADResult = {
-  /** Whether voice is detected */
-  isVoiceDetected: boolean;
-
-  /** Confidence score (0.0-1.0) */
-  confidence: number;
-
-  /** Detection timestamp */
-  timestamp: number;
-
-  /** Whether this is a state change event */
-  isStateChange: boolean;
-
-  /** Previous state (for state change events) */
-  previousState?: boolean;
-
-  /** Platform-specific debug info */
-  debugInfo?: {
-    frameSize?: number;
-    sampleRate?: number;
-    processingTime?: number;
-    bufferHealth?: 'good' | 'warning' | 'critical';
-  };
-};
-
-/**
- * VAD initialization result
- */
-export type VADInitResult = {
-  /** Whether initialization was successful */
-  success: boolean;
-
-  /** Error message if failed */
-  error?: string;
-
-  /** Available features */
-  features?: {
-    realTimeProcessing: boolean;
-    confidenceScoring: boolean;
-    sessionStats: boolean;
-    debugMode: boolean;
-  };
 };
 
 // Audio Amplitude Types
@@ -292,23 +208,6 @@ export type AudioAmplitudeResult = {
 };
 
 // Function Return Types
-
-/**
- * Standard function result for operations that can succeed or fail
- */
-export type OperationResult = {
-  /** Whether operation succeeded */
-  success: boolean;
-  /** Result message or error description */
-  message: string;
-  /** Additional data if applicable */
-  data?: any;
-};
-
-/**
- * File path result type
- */
-export type FilePathResult = string | null;
 
 /**
  * Duration result in seconds

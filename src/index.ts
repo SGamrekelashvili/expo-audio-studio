@@ -28,15 +28,8 @@ export type {
   PlaybackSpeed,
 
   // Recording types
-  RecordingOptions,
   RecordingState,
   RecordingStatus,
-
-  // VAD types
-  VADResult,
-  VADInitResult,
-  VADSensitivity,
-  VADMode,
 
   // Audio Amplitude types
   AudioAmplitudeResult,
@@ -48,9 +41,7 @@ export type {
   AudioSessionConfig,
 
   // Utility types
-  FilePathResult,
   DurationResult,
-  OperationResult,
   ErrorResponse,
   AudioHandlerError,
 } from './ExpoAudioStudio.types';
