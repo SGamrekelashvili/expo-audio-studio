@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.0...v1.2.1) (2025-10-27)
+
+
+### Bug Fixes
+
+* **ios:** remove unused function ([40eb942](https://github.com/SGamrekelashvili/expo-audio-studio/commit/40eb942909eaf1ee3dc6f06e5bd7cecd7e87714e))
+
 # [1.2.0](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.1.2...v1.2.0) (2025-10-27)
 
 
