@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.1...v1.2.2) (2025-10-27)
+
+
+### Bug Fixes
+
+* **api:** move up setVADEventMode api ([fc1035d](https://github.com/SGamrekelashvili/expo-audio-studio/commit/fc1035d84540a442725754a9bc8116698499bf72))
+
 ## [1.2.1](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.0...v1.2.1) (2025-10-27)
 
 
