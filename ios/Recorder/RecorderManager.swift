@@ -163,10 +163,8 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
             return "NoRecorderException"
         }
         
-        // Pause recording first
         recorder.pause()
         
-        // Clean up timer while paused - do this asynchronously to avoid blocking
         DispatchQueue.main.async { [weak self] in
             self?.cleanupTimer()
             self?.statusCallback?("paused")
@@ -187,14 +185,11 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
             return "Failed to resume recording"
         }
         
-        // Restart metering timer asynchronously to avoid blocking
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             
-            // Ensure any existing timer is cleaned up first
             self.cleanupTimer()
             
-            // Create new timer with a slight delay to ensure clean state
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 guard let self = self else { return }
                 
@@ -211,34 +206,22 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         return "resumed"
     }
     
-    // Internal stop recording method (assumes lock is already held)
     private func stopRecordingInternal() -> String {
-        // Check if a recorder exists and is currently recording
         guard let recorder = self.audioRecorder else {
             return "NoRecorderException"
         }
         
         let recordingURL = recorder.url
         
-        // Stop the recording and let the delegate handle the completion
         if recorder.isRecording {
-            recorder.stop() // This will trigger audioRecorderDidFinishRecording
-            
-            // PERFORMANCE FIX: Use async delay instead of blocking main thread
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                // File finalization happens automatically via delegate
-                print("[\(Date())] Recording file finalization delay completed")
-            }
+            recorder.stop() 
         }
         
-        // Update state immediately
         isRecording = false
         self.lastRecordingOutput = recordingURL
         
-        // VAD OPTIMIZATION: Notify that recording stopped
         recordingStoppedCallback?()
         
-        // Clean up timer and recorder
         cleanupTimer()
         cleanupRecorderInternal()
         
@@ -253,51 +236,40 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
     
-    // Provide access to recorder for direct status checks
     func getRecorder() -> AVAudioRecorder? {
         stateLock.lock()
         defer { stateLock.unlock() }
         return audioRecorder
     }
     
-    // Check if currently recording
     func isCurrentlyRecording() -> Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
         return isRecording && audioRecorder?.isRecording == true
     }
     
-    // Check if currently paused
     func isPaused() -> Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
         return audioRecorder != nil && !audioRecorder!.isRecording && isRecording
     }
     
-    // VAD OPTIMIZATION: Set callback for when recording stops
     func setRecordingStoppedCallback(_ callback: @escaping () -> Void) {
         stateLock.lock()
         defer { stateLock.unlock() }
         recordingStoppedCallback = callback
     }
     
-    // MARK: - Private Helper Methods
-    
     private func cleanupTimer() {
-        // CRITICAL FIX: Use async dispatch to prevent deadlock
-        // Never use sync dispatch while holding stateLock
         if Thread.isMainThread {
             if let timer = self.recordTimer {
-                print("[\(Date())] cleanupTimer: Invalidating timer.")
                 timer.invalidate()
                 self.recordTimer = nil
             }
         } else {
-            // Use async to prevent deadlock - timer cleanup can happen asynchronously
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 if let timer = self.recordTimer {
-                    print("[\(Date())] cleanupTimer: Invalidating timer.")
                     timer.invalidate()
                     self.recordTimer = nil
                 }
@@ -316,7 +288,6 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         isCleaningUp = false
     }
     
-    // Public cleanup method
     func cleanup() {
         stateLock.lock()
         defer { stateLock.unlock() }
@@ -335,7 +306,6 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
     // MARK: - RecorderDelegateProtocol
     
     func recorderDidFinishRecording(successfully: Bool) {
-        // CRITICAL FIX: Minimize lock scope to prevent deadlock
         var callback: ((String) -> Void)?
         
         stateLock.lock()
@@ -344,30 +314,25 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         callback = statusCallback
         stateLock.unlock()
         
-        // Clean up timer outside of lock to prevent deadlock
         cleanupTimer()
         
-        // Notify status changes through callback
         DispatchQueue.main.async {
             callback?(successfully ? "stopped" : "failed")
         }
     }
     
     func recorderEncodeErrorDidOccur(error: Error?) {
-        // CRITICAL FIX: Minimize lock scope to prevent deadlock
         var callback: ((String) -> Void)?
         
         stateLock.lock()
-        // Update internal state
+
         isRecording = false
         callback = statusCallback
         stateLock.unlock()
         
-        // Clean up timer and recorder outside of lock
         cleanupTimer()
         cleanupRecorderInternal()
         
-        // Notify error status
         DispatchQueue.main.async {
             callback?("error")
         }

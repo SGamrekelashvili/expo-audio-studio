@@ -13,7 +13,7 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
 
     
     func preparePlayer(path: String, sendPlayerStatusEvent: @escaping (Bool, Bool) -> Void) -> String? {
-        // Store the callback for later delegate events
+        // Store the callback for later events
         self.onPlayerStatusChange = sendPlayerStatusEvent
 
         do {
