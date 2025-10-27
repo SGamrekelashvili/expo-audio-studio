@@ -348,34 +348,34 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
   // Voice Activity Detection
 
   /**
-   * Starts Voice Activity Detection (requires active recording)
+   * Sets VAD enabled state - manages VAD lifecycle automatically
    *
+   * @param mode - VAD event mode ('onEveryFrame' | 'throttled' | 'onChange')
+   * @param throttleMs - Optional throttle time in milliseconds (for 'throttled' mode)
    * @returns Success message or error description
    *
    * @example
    * ```typescript
-   * // Start recording first
-   * startRecording();
-   *
-   * // Then start VAD
-   * const result = ExpoAudioStudio.startVoiceActivityDetection();
-   * console.log('VAD result:', result);
+   * // Enable VAD - will start with next recording or immediately if recording
+   * const result = ExpoAudioStudio.setVADEventMode('onEveryFrame');
+   * console.log(result); // "Success: VAD event mode set to onEveryFrame" or error
    * ```
-   */
-  startVoiceActivityDetection(): string;
-
-  /**
-   * Stops Voice Activity Detection and returns session statistics
-   *
-   * @returns Success message or error description
    *
    * @example
    * ```typescript
-   * const result = ExpoAudioStudio.stopVoiceActivityDetection();
-   * console.log('VAD stopped:', result);
+   * // Enable VAD - will start with next recording or immediately if recording
+   * const result = ExpoAudioStudio.setVADEventMode('throttled', 200);
+   * console.log(result); // "Success: VAD event mode set to throttled with 200ms throttle" or error
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // Enable VAD - will start with next recording or immediately if recording
+   * const result = ExpoAudioStudio.setVADEventMode('onChange');
+   * console.log(result); // "Success: VAD event mode set to onChange" or error
    * ```
    */
-  stopVoiceActivityDetection(): string;
+  setVADEventMode(_mode: 'onEveryFrame' | 'throttled' | 'onChange', _throttleMs?: number): string;
 
   /**
    * Sets VAD enabled state - manages VAD lifecycle automatically

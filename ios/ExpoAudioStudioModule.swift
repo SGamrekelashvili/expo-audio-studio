@@ -727,6 +727,7 @@ public class ExpoAudioStudioModule: Module {
             return self.isVADEnabledFromJS
         }
         
+        //"onChange", "onEveryFrame", "throttled" 
         Function("setVADEventMode") { (mode: String, throttleMs: Int?) -> String in
             if #available(iOS 14.0, *) {
                 let manager = self.getSoundClassificationManager()
@@ -742,13 +743,6 @@ public class ExpoAudioStudioModule: Module {
             }
         }
         
-        Property("isVoiceActivityDetectionActive") {
-            if #available(iOS 14.0, *) {
-                return self.soundClassificationManager?.isVoiceActivityDetectionActive() ?? false
-            } else {
-                return false
-            }
-        }
         
         // MARK: - Audio Session Functions
         

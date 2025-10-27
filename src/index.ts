@@ -552,6 +552,41 @@ export function getMicrophonePermissionStatus(): Promise<PermissionResponse> {
 /**
  * Sets VAD enabled state - manages VAD lifecycle automatically
  *
+ * @param mode - VAD event mode ('onEveryFrame' | 'throttled' | 'onChange')
+ * @param throttleMs - Optional throttle time in milliseconds (for 'throttled' mode)
+ * @returns Success message or error description
+ *
+ * @example
+ * ```typescript
+ * // Enable VAD - will start with next recording or immediately if recording
+ * const result = ExpoAudioStudio.setVADEventMode('onEveryFrame');
+ * console.log(result); // "Success: VAD event mode set to onEveryFrame" or error
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Enable VAD - will start with next recording or immediately if recording
+ * const result = ExpoAudioStudio.setVADEventMode('throttled', 200);
+ * console.log(result); // "Success: VAD event mode set to throttled with 200ms throttle" or error
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Enable VAD - will start with next recording or immediately if recording
+ * const result = ExpoAudioStudio.setVADEventMode('onChange');
+ * console.log(result); // "Success: VAD event mode set to onChange" or error
+ * ```
+ */
+export function setVADEventMode(
+  mode: 'onEveryFrame' | 'throttled' | 'onChange',
+  throttleMs?: number
+): string {
+  return ExpoAudioStudioModule.setVADEventMode(mode, throttleMs);
+}
+
+/**
+ * Sets VAD enabled state - manages VAD lifecycle automatically
+ *
  * @param enabled - Whether to enable VAD for current and future recordings
  * @returns Success message or error description
  *

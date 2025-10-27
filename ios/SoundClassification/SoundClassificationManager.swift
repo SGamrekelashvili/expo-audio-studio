@@ -14,6 +14,7 @@ class EnhancedSoundClassificationManager: NSObject {
     
     private var lastVoiceState: Bool = false
     
+    // "onEveryFrame" | "onChange" | "throttled"
     public var vadEventMode: String = "onEveryFrame"
     public var vadThrottleMs: Int = 100
     private var lastEventTime: TimeInterval = 0
