@@ -8,6 +8,7 @@ import {
   VoiceActivityEvent,
   AudioSessionConfig,
   AudioAmplitudeResult,
+  PlayerStatusResult,
 } from './ExpoAudioStudio.types';
 
 export type {
@@ -671,70 +672,75 @@ export function deactivateAudioSession(): Promise<void> {
   return Promise.resolve();
 }
 
-// Properties
-
 /**
  * Detailed player status information
  *
  * @example
  * ```typescript
- * const status = playerStatus;
+ * const status = getPlayerStatus();
  * console.log(`Playing: ${status.isPlaying}, Duration: ${status.duration}s`);
  * ```
  */
-export const playerStatus = ExpoAudioStudioModule.playerStatus;
+export function getPlayerStatus(): PlayerStatusResult {
+  return ExpoAudioStudioModule.playerStatus;
+}
 
 /**
- * Current playback position in seconds
+ * Gets the current playback position in seconds
+ *
+ * @returns Current playback position in seconds, or 0.0 if no player is active
  *
  * @example
  * ```typescript
- * const position = currentPosition;
+ * const position = getCurrentPosition();
  * console.log(`Current position: ${position}s`);
+ *
+ * // Use in an interval to track progress
+ * const interval = setInterval(() => {
+ *   const pos = getCurrentPosition();
+ *   console.log(`Playing at ${pos}s`);
+ * }, 1000);
  * ```
  */
-export const currentPosition = ExpoAudioStudioModule.currentPosition;
+export function getCurrentPosition(): number {
+  return ExpoAudioStudioModule.currentPosition;
+}
 
 /**
  * Current audio level during recording (in dB)
  *
  * @example
  * ```typescript
- * const level = meterLevel;
+ * const level = getCurrentMeterLevel();
  * console.log(`Audio level: ${level} dB`);
  * ```
  */
-export const meterLevel = ExpoAudioStudioModule.meterLevel;
+export function getCurrentMeterLevel(): number {
+  return ExpoAudioStudioModule.meterLevel;
+}
 
 /**
  * Whether Voice Activity Detection is currently active (processing audio)
  *
  * @example
  * ```typescript
- * const isActive = isVADActive;
+ * const isActive = getIsVADActive();
  * console.log('VAD currently active:', isActive);
  * ```
  */
-export const isVADActive = ExpoAudioStudioModule.isVADActive;
+export function getIsVADActive(): boolean {
+  return ExpoAudioStudioModule.isVADActive;
+}
 
 /**
  * Whether VAD is enabled by user preference (will auto-start with recordings)
  *
  * @example
  * ```typescript
- * const isEnabled = isVADEnabled;
+ * const isEnabled = getIsVADEnabled();
  * console.log('VAD preference enabled:', isEnabled);
  * ```
  */
-export const isVADEnabled = ExpoAudioStudioModule.isVADEnabled;
-
-/**
- * Whether recording is currently paused
- *
- * @example
- * ```typescript
- * const paused = isPaused;
- * console.log('Recording paused:', paused);
- * ```
- */
-export const isPaused = ExpoAudioStudioModule.isPaused;
+export function getIsVADEnabled(): boolean {
+  return ExpoAudioStudioModule.isVADEnabled;
+}

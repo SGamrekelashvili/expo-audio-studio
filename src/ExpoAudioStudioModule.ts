@@ -254,7 +254,7 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    * @example
    * ```typescript
    * const position = ExpoAudioStudio.currentPosition;
-   * console.log(`Current position: ${position}s`);
+   * console.log(`Current position: ${position}`);
    * ```
    */
   readonly currentPosition: number;
@@ -307,17 +307,6 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    * ```
    */
   readonly isVADEnabled: boolean;
-
-  /**
-   * Whether recording is currently paused
-   *
-   * @example
-   * ```typescript
-   * const paused = ExpoAudioStudio.isPaused;
-   * console.log('Recording paused:', paused);
-   * ```
-   */
-  readonly isPaused: boolean;
 
   // Utility Methods
 
