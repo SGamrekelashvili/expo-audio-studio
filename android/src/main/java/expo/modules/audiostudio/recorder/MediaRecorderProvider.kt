@@ -308,7 +308,6 @@ class MediaRecorderProviderWithSileroVAD(
                                     "isVoiceDetected" to isVoice,
                                     "timestamp" to currentTime,
                                     "confidence" to if (isVoice) 0.85 else 0.15,
-                                    "audioLevel" to amplitude,
                                     "isStateChange" to isStateChange,
                                     "previousState" to lastVoiceState,
                                     "eventType" to eventType
@@ -318,7 +317,6 @@ class MediaRecorderProviderWithSileroVAD(
                             
                             if (isStateChange) {
                                 lastVoiceState = isVoice
-                                Log.d(TAG, if (isVoice) "🎤 Voice detected (amp: ${amplitude.toInt()} dB)" else "🔇 Silence detected")
                             }
                             
                             lastEventTime = currentTime
@@ -326,14 +324,14 @@ class MediaRecorderProviderWithSileroVAD(
                     }
                 } else if (samplesRead < 0) {
                     consecutiveErrors++
-                    Log.w(TAG, "⚠️ AudioRecord read error: $samplesRead (consecutive: $consecutiveErrors)")
+                    Log.w(TAG, "AudioRecord read error: $samplesRead (consecutive: $consecutiveErrors)")
                     
                     if (consecutiveErrors >= maxConsecutiveErrors) {
-                        Log.e(TAG, "❌ Too many consecutive read errors, stopping VAD")
+                        Log.e(TAG, "Too many consecutive read errors, stopping VAD")
                         break
                     }
                 } else {
-                    Log.w(TAG, "⚠️ Incomplete frame read: $samplesRead/$frameSize samples")
+                    Log.w(TAG, "Incomplete frame read: $samplesRead/$frameSize samples")
                 }
 
                 // Optimal delay for 32ms frames
@@ -341,10 +339,10 @@ class MediaRecorderProviderWithSileroVAD(
 
             } catch (e: Exception) {
                 consecutiveErrors++
-                Log.e(TAG, "❌ Error in VAD processing: ${e.message} (consecutive: $consecutiveErrors)")
+                Log.e(TAG, "Error in VAD processing: ${e.message} (consecutive: $consecutiveErrors)")
                 
                 if (consecutiveErrors >= maxConsecutiveErrors) {
-                    Log.e(TAG, "❌ Too many consecutive errors, stopping VAD")
+                    Log.e(TAG, "Too many consecutive errors, stopping VAD")
                     break
                 }
                 
@@ -352,7 +350,7 @@ class MediaRecorderProviderWithSileroVAD(
             }
         }
 
-        Log.d(TAG, "🛑 Silero VAD audio processing stopped")
+        Log.d(TAG, "Silero VAD audio processing stopped")
     }
 
     override fun stopVoiceActivityDetection(): String {
@@ -377,11 +375,11 @@ class MediaRecorderProviderWithSileroVAD(
                 webRTCVad?.close()
                 webRTCVad = null
 
-                Log.d(TAG, "🛑 Silero VAD stopped successfully")
+                Log.d(TAG, "Silero VAD stopped successfully")
                 "Success"
 
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error stopping Silero VAD: ${e.message}")
+                Log.e(TAG, "Error stopping Silero VAD: ${e.message}")
                 cleanup()
                 "Error: ${e.message}"
             }
@@ -499,9 +497,7 @@ class MediaRecorderProviderWithSileroVAD(
         }
         val rms = sqrt(sum / buffer.size)
         
-        // Convert RMS to decibels
-        // Reference: 0 dB = maximum amplitude (1.0)
-        // Minimum: -160 dB (effectively silence)
+     
         return if (rms > 0.0) {
             val db = 20.0 * log10(rms)
             maxOf(-160.0f, db.toFloat()) // Clamp to -160 dB minimum

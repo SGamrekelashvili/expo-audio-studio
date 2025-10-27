@@ -208,13 +208,13 @@ playerSubscription.remove();
 
 ### Voice Activity Detection
 
-| Function                               | Description                                    | Returns           |
-| -------------------------------------- | ---------------------------------------------- | ----------------- |
-| `setVADEnabled(enabled)`               | Enable/disable VAD                             | `string` - Status |
-| `setVoiceActivityThreshold(threshold)` | Set detection threshold (0.0-1.0)              | `string` - Status |
-| `setVADEventMode(mode, throttleMs?)`   | Control event frequency                        | `string` - Status |
-| `getIsVADActive()`                     | Whether VAD is currently processing audio      | `boolean`         |
-| `getIsVADEnabled()`                    | Whether VAD is enabled by user preference      | `boolean`         |
+| Function                               | Description                               | Returns           |
+| -------------------------------------- | ----------------------------------------- | ----------------- |
+| `setVADEnabled(enabled)`               | Enable/disable VAD                        | `string` - Status |
+| `setVoiceActivityThreshold(threshold)` | Set detection threshold (0.0-1.0)         | `string` - Status |
+| `setVADEventMode(mode, throttleMs?)`   | Control event frequency                   | `string` - Status |
+| `getIsVADActive()`                     | Whether VAD is currently processing audio | `boolean`         |
+| `getIsVADEnabled()`                    | Whether VAD is enabled by user preference | `boolean`         |
 
 ### Audio Analysis
 
@@ -230,8 +230,6 @@ playerSubscription.remove();
 | --------------------------------------- | ----------------------- | ---------------------- |
 | `listRecordings(directoryPath?)`        | List audio files        | `array` - File list    |
 | `joinAudioFiles(filePaths, outputPath)` | Concatenate audio files | `string` - Output path |
-
- 
 
 ### Event Listeners
 
@@ -349,9 +347,9 @@ setVADEnabled(true);
 
 const subscription = addVoiceActivityListener(event => {
   if (event.isVoiceDetected) {
-    console.log('🎤 Voice detected');
+    console.log('Voice detected');
   } else {
-    console.log('🔇 Silence detected');
+    console.log('Silence detected');
   }
 });
 ```

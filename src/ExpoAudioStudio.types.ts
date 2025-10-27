@@ -124,9 +124,6 @@ export type VoiceActivityEvent = {
   /** Timestamp of detection */
   timestamp: number;
 
-  /** Current audio level in dB */
-  audioLevel?: number;
-
   /** Whether this represents a state change */
   isStateChange: boolean;
 
@@ -134,12 +131,7 @@ export type VoiceActivityEvent = {
   previousState?: boolean;
 
   /** Event type for better handling */
-  eventType:
-    | 'speech_start'
-    | 'speech_continue'
-    | 'speech_end'
-    | 'silence_start'
-    | 'silence_continue';
+  eventType: 'speech_start' | 'speech_continue' | 'silence_start' | 'silence_continue';
 };
 
 // Permission Types
