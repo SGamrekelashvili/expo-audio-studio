@@ -237,9 +237,6 @@ export type VADResult = {
   /** Detection timestamp */
   timestamp: number;
 
-  /** Current audio level (dB) */
-  audioLevel?: number;
-
   /** Whether this is a state change event */
   isStateChange: boolean;
 

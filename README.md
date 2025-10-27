@@ -255,7 +255,6 @@ addVoiceActivityListener((event: VoiceActivityEvent) => {
   // event.isStateChange: boolean - Did the state just change?
   // event.previousState: boolean - What was the previous state
   // event.eventType: 'speech_start' | 'speech_continue' | 'silence_start' | 'silence_continue'
-  // event.audioLevel: number - Current audio level in dB (Android only)
 });
 ```
 
