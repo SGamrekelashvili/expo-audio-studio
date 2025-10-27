@@ -107,14 +107,13 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
     }
     
     func stopPlayingAudio() -> Bool {
-        
         guard let player = self.audioPlayer else {
             return false
         }
 
         player.stop()
         self.audioPlayer = nil
-        return false
+        return true
     }
     
     func pausePlayingAudio() -> String {
@@ -156,24 +155,6 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
         }
     }
     
-    func getPlayerStatus() -> [String: Any] {
-        guard let player = self.audioPlayer else {
-            return [
-                "isPlaying": false,
-                "duration": 0,
-                "currentTime": 0,
-                "speed": currentPlaybackSpeed
-            ]
-        }
-        
-        return [
-            "isPlaying": player.isPlaying,
-            "duration": player.duration,
-            "currentTime": player.currentTime,
-            "speed": player.rate
-        ]
-    }
-    
     func seekToTime(position: TimeInterval) -> String {
         guard let player = self.audioPlayer else {
             return "NoPlayerException"
@@ -185,23 +166,6 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
     
     func getPlayer() -> AVAudioPlayer? {
         return audioPlayer
-    }
-    
-    // MARK: - Volume Control
-    
-    func setVolume(volume: Float) -> String {
-        guard let player = self.audioPlayer else {
-            return "NoPlayerException"
-        }
-        
-        // Ensure volume is between 0 and 1
-        let normalizedVolume = min(max(0.0, volume), 1.0)
-        player.volume = normalizedVolume
-        return "success"
-    }
-    
-    func getVolume() -> Float {
-        return self.audioPlayer?.volume ?? 1.0
     }
     
     // MARK: - PlayerDelegateProtocol

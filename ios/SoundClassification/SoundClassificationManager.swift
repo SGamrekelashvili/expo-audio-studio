@@ -13,8 +13,6 @@ class EnhancedSoundClassificationManager: NSObject {
     private var voiceActivityCallback: (([String: Any]) -> Void)?
     
     private var lastVoiceState: Bool = false
-    private var speechStartTime: TimeInterval = 0
-    private var silenceStartTime: TimeInterval = 0
     
     public var vadEventMode: String = "onEveryFrame"
     public var vadThrottleMs: Int = 100
@@ -164,18 +162,6 @@ class EnhancedSoundClassificationManager: NSObject {
         }
         
         if shouldSendEvent {
-            if hasVoiceActivity {
-                speechStartTime = currentTime
-                silenceStartTime = 0
-            } else {
-                silenceStartTime = currentTime
-                speechStartTime = 0
-            }
-            
-            let stateDuration = hasVoiceActivity ? 
-                (speechStartTime > 0 ? Int((currentTime - speechStartTime) * 1000) : 0) :
-                (silenceStartTime > 0 ? Int((currentTime - silenceStartTime) * 1000) : 0)
-            
             let eventType: String
             if isStateChange {
                 eventType = hasVoiceActivity ? "speech_start" : "silence_start"
@@ -190,8 +176,7 @@ class EnhancedSoundClassificationManager: NSObject {
                     "isVoiceDetected": hasVoiceActivity,
                     "confidence": maxVoiceConfidence,
                     "timestamp": currentTime * 1000,
-                    "stateDuration": stateDuration,
-                    "isStateChange": true,
+                    "isStateChange": isStateChange,
                     "previousState": self.lastVoiceState,
                     "eventType": eventType
                 ]
@@ -222,7 +207,6 @@ extension EnhancedSoundClassificationManager: SNResultsObserving {
                 "isVoiceDetected": false,
                 "confidence": 0.0,
                 "timestamp": Date().timeIntervalSince1970 * 1000,
-                "stateDuration": 0,
                 "isStateChange": false,
                 "eventType": "silence_continue"
             ]
