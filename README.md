@@ -258,7 +258,6 @@ addVoiceActivityListener((event: VoiceActivityEvent) => {
   // event.isVoiceDetected: boolean - Is someone speaking?
   // event.confidence: number - How confident is the detection (0.0-1.0)
   // event.timestamp: number - When this happened
-  // event.stateDuration: number - How long in this state (ms)
   // event.isStateChange: boolean - Did the state just change?
   // event.previousState: boolean - What was the previous state
   // event.eventType: 'speech_start' | 'speech_continue' | 'silence_start' | 'silence_continue'

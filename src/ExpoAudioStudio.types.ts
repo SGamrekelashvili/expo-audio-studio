@@ -124,9 +124,6 @@ export type VoiceActivityEvent = {
   /** Timestamp of detection */
   timestamp: number;
 
-  /** Duration of current state in ms */
-  stateDuration: number;
-
   /** Current audio level in dB */
   audioLevel?: number;
 
@@ -247,9 +244,6 @@ export type VADResult = {
 
   /** Detection timestamp */
   timestamp: number;
-
-  /** Duration of current state in ms */
-  stateDuration: number;
 
   /** Current audio level (dB) */
   audioLevel?: number;

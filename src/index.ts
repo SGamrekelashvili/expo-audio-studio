@@ -1,4 +1,4 @@
-import { EventSubscription } from 'expo-modules-core';
+import { EventSubscription, Platform } from 'expo-modules-core';
 import ExpoAudioStudioModule from './ExpoAudioStudioModule';
 import {
   AudioMeteringEvent,
@@ -625,7 +625,10 @@ export function setVoiceActivityThreshold(threshold: number): string {
  * ```
  */
 export function configureAudioSession(config: AudioSessionConfig): Promise<void> {
-  return ExpoAudioStudioModule.configureAudioSession(config);
+  if (Platform.OS === 'ios') {
+    return ExpoAudioStudioModule.configureAudioSession(config);
+  }
+  return Promise.resolve();
 }
 
 /**
@@ -642,7 +645,10 @@ export function configureAudioSession(config: AudioSessionConfig): Promise<void>
  * ```
  */
 export function activateAudioSession(): Promise<void> {
-  return ExpoAudioStudioModule.activateAudioSession();
+  if (Platform.OS === 'ios') {
+    return ExpoAudioStudioModule.activateAudioSession();
+  }
+  return Promise.resolve();
 }
 
 /**
@@ -659,7 +665,10 @@ export function activateAudioSession(): Promise<void> {
  * ```
  */
 export function deactivateAudioSession(): Promise<void> {
-  return ExpoAudioStudioModule.deactivateAudioSession();
+  if (Platform.OS === 'ios') {
+    return ExpoAudioStudioModule.deactivateAudioSession();
+  }
+  return Promise.resolve();
 }
 
 // Properties
