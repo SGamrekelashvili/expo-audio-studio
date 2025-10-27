@@ -8,10 +8,7 @@ import android.util.Log
 import android.content.Context
 import java.io.File
 
-/**
- * MediaPlayerProvider is responsible for managing audio playback.
- * It implements the AudioPlayerProvider interface.
- */
+
 class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
 
     private var playbackSpeed = 1f
@@ -26,12 +23,7 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         )
 
 
-    /**
-     * Prepares the audio player without starting playback.
-     * @param fileName The path of the audio file.
-     * @param AudioEndFunction The callback to be invoked on completion.
-     * @return True if player was prepared successfully, false otherwise.
-     */
+
     override fun preparePlayer(
         fileName: String,
         AudioEndFunction: (result: Map<String, Boolean>) -> Unit
@@ -64,37 +56,27 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
                             Log.d(TAG, "Asset name: $assetName")
                             
                             val afd = context.assets.openFd(assetName)
-                            Log.d(TAG, "Asset file descriptor opened successfully")
                             setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                             afd.close()
-                            Log.d(TAG, "Asset data source set successfully")
                         }
                         // Check if it's a relative asset path (no prefix)
                         !fileName.contains("/") && !fileName.contains("\\") -> {
-                            Log.d(TAG, "Preparing from assets folder with direct filename: $fileName")
                             
                             try {
                                 val afd = context.assets.openFd(fileName)
-                                Log.d(TAG, "Asset file descriptor opened successfully")
                                 setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                                 afd.close()
-                                Log.d(TAG, "Asset data source set successfully")
                             } catch (e: Exception) {
-                                Log.e(TAG, "Error loading asset file: $fileName", e)
                                 throw e
                             }
                         }
                         // Handle file URIs
                         fileName.startsWith("file://") -> {
-                            Log.d(TAG, "Preparing from file URI")
                             val path = fileName.replace("file://", "")
-                            Log.d(TAG, "File path: $path")
                             val file = File(path)
                             if (file.exists()) {
-                                Log.d(TAG, "File exists, size: ${file.length()} bytes")
                                 setDataSource(path)
                             } else {
-                                Log.e(TAG, "File does not exist: $path")
                                 throw java.io.FileNotFoundException("File not found: $path")
                             }
                         }
@@ -136,12 +118,6 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         }
     }
 
-    /**
-     * Starts playing the audio file.
-     * @param fileName The path of the audio file.
-     * @param onComplete The callback to be invoked on completion.
-     * @return True if playback started successfully, false otherwise.
-     */
     private var currentFileName: String? = null  // Track current prepared file
     
     override fun startPlaying(
@@ -183,11 +159,6 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
 
 
 
-
-    /**
-     * Stops playing the audio.
-     * @return True if playback stopped successfully, false otherwise.
-     */
     override fun stopPlaying(): Boolean {
         return try {
             stopAndReleasePlayer()
@@ -199,10 +170,6 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         }
     }
     
-    /**
-     * Pauses audio playback.
-     * @return True if playback was paused successfully, false otherwise.
-     */
     override fun pausePlaying(): Boolean {
         return try {
             _player?.let {
@@ -219,10 +186,6 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         }
     }
     
-    /**
-     * Resumes audio playback if it was paused.
-     * @return True if playback was resumed successfully, false otherwise.
-     */
     override fun resumePlaying(): Boolean {
         return try {
             _player?.let {
@@ -239,11 +202,6 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         }
     }
     
-    /**
-     * Seeks to a specific position in the audio file.
-     * @param position The position to seek to, in milliseconds.
-     * @return True if seeking was successful, false otherwise.
-     */
     override fun seekTo(position: Int): Boolean {
         return try {
             _player?.let {
@@ -257,26 +215,17 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         }
     }
     
-    /**
-     * Checks if audio is currently playing.
-     * @return True if audio is playing, false otherwise.
-     */
+
     override fun isPlaying(): Boolean {
         return _player?.isPlaying ?: false
     }
     
-    /**
-     * Gets the current playback speed.
-     * @return The current playback speed.
-     */
+
     override fun getPlaybackSpeed(): Float {
         return playbackSpeed
     }
     
-    /**
-     * Gets the current playback position in milliseconds.
-     * @return The current position in milliseconds, or 0 if no player exists.
-     */
+
     override fun getCurrentPosition(): Int {
         return try {
             _player?.currentPosition ?: 0
@@ -286,12 +235,7 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         }
     }
     
-    /**
-     * Gets the duration of an audio file without creating a permanent player.
-     * @param uri The URI of the audio file.
-     * @param context The application context.
-     * @return The duration of the audio file in milliseconds, or 0 if unavailable.
-     */
+
     override fun getAudioDuration(uri: String, context: Context): Int {
         // Create a temporary MediaPlayer to get the duration
         val tempPlayer = MediaPlayer()
@@ -345,9 +289,6 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         return duration
     }
 
-    /**
-     * Stops and releases the MediaPlayer.
-     */
     private fun stopAndReleasePlayer() {
         _player?.run {
             stop()
@@ -368,10 +309,6 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         }
     }
 
-    /**
-     * Returns the player status as a StateFlow.
-     * @return StateFlow of PlayerProgress.
-     */
     override fun playerStatus(): PlayerProgress? {
         return _player?.let {
             PlayerProgress(
@@ -382,11 +319,8 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         }
     }
 
-    /**
-     * Releases the player resources.
-     */
     override fun releasePlayer() {
-//        coroutineScope.cancel()
+        stopAndReleasePlayer()
     }
 
     companion object {

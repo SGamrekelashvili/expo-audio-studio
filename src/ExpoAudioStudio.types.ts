@@ -143,24 +143,6 @@ export type VoiceActivityEvent = {
     | 'speech_end'
     | 'silence_start'
     | 'silence_continue';
-
-  /** Session statistics (sent periodically) */
-  sessionStats?: VADSessionStats;
-
-  /** Performance metrics */
-  performance?: {
-    processingLatency: number;
-    cpuUsage?: number;
-    memoryUsage?: number;
-  };
-
-  /** Platform-specific data */
-  platformData?: {
-    engine: string;
-    frameSize?: number;
-    sampleRate?: number;
-    bufferStatus?: 'healthy' | 'warning' | 'critical';
-  };
 };
 
 // Permission Types
@@ -254,67 +236,6 @@ export type VADSensitivity = 'low' | 'medium' | 'high' | 'very_high';
 export type VADMode = 'normal' | 'aggressive' | 'very_aggressive';
 
 /**
- * VAD platform-specific information
- */
-export type VADPlatformInfo = {
-  /** Platform (iOS/Android) */
-  platform: 'ios' | 'android';
-  /** VAD engine being used */
-  engine: 'core_ml' | 'silero' | 'webrtc' | 'unknown';
-  /** Engine version if available */
-  engineVersion?: string;
-  /** Whether real-time processing is supported */
-  supportsRealTime: boolean;
-};
-
-/**
- * Comprehensive Voice Activity Detection configuration
- */
-export type VADConfig = {
-  /** Simple sensitivity setting (recommended for most users) */
-  sensitivity?: VADSensitivity;
-
-  /** Advanced: Manual threshold (0.0-1.0) - overrides sensitivity */
-  threshold?: number;
-
-  /** Advanced: Detection mode */
-  mode?: VADMode;
-
-  /** Minimum speech duration in ms (default: 50ms) */
-  minSpeechDuration?: number;
-
-  /** Minimum silence duration in ms (default: 300ms) */
-  minSilenceDuration?: number;
-
-  /** Enable real-time events (default: true) */
-  realTimeEvents?: boolean;
-
-  /** Event throttling in ms (default: 100ms) */
-  eventThrottleMs?: number;
-
-  /** Enable debug logging */
-  debugLogging?: boolean;
-};
-
-/**
- * VAD session statistics
- */
-export type VADSessionStats = {
-  /** Total session duration in ms */
-  sessionDuration: number;
-  /** Total speech detected duration in ms */
-  speechDuration: number;
-  /** Total silence duration in ms */
-  silenceDuration: number;
-  /** Number of speech segments detected */
-  speechSegments: number;
-  /** Average confidence during speech */
-  averageConfidence: number;
-  /** Peak confidence detected */
-  peakConfidence: number;
-};
-
-/**
  * VAD detection result with comprehensive information
  */
 export type VADResult = {
@@ -339,9 +260,6 @@ export type VADResult = {
   /** Previous state (for state change events) */
   previousState?: boolean;
 
-  /** Session statistics (updated periodically) */
-  sessionStats?: VADSessionStats;
-
   /** Platform-specific debug info */
   debugInfo?: {
     frameSize?: number;
@@ -360,12 +278,6 @@ export type VADInitResult = {
 
   /** Error message if failed */
   error?: string;
-
-  /** Platform information */
-  platformInfo?: VADPlatformInfo;
-
-  /** Applied configuration */
-  config?: VADConfig;
 
   /** Available features */
   features?: {

@@ -130,17 +130,27 @@ subscription.remove();
 ```typescript
 import {
   setVADEnabled,
+  setVADEventMode,
   addVoiceActivityListener,
   startRecording,
 } from 'expo-audio-studio';
+
+// Choose how often you want events
+setVADEventMode('onEveryFrame'); // Real-time (default)
+// setVADEventMode('onChange');  // Only state changes
+// setVADEventMode('throttled', 100); // Every 100ms
 
 // Enable VAD
 setVADEnabled(true);
 
 // Listen to voice activity
 const vadSubscription = addVoiceActivityListener(event => {
-  console.log('Voice detected:', event.isVoiceDetected);
+  if (event.isStateChange) {
+    // State just changed - someone started or stopped talking
+    console.log(event.isVoiceDetected ? 'Started talking!' : 'Stopped talking');
+  }
   console.log('Confidence:', event.confidence);
+  console.log('Event type:', event.eventType);
 });
 
 // Start recording - VAD will automatically start
@@ -176,12 +186,12 @@ playerSubscription.remove();
 ### Recording Functions
 
 | Function                         | Description             | Returns                    |
-| -------------------------------- | ----------------------- | -------------------------- | ----- |
+| -------------------------------- | ----------------------- | -------------------------- |
 | `startRecording(directoryPath?)` | Start audio recording   | `string` - File path       |
 | `stopRecording()`                | Stop recording          | `string` - Final file path |
 | `pauseRecording()`               | Pause recording         | `string` - Status message  |
 | `resumeRecording()`              | Resume recording        | `string` - Status message  |
-| `lastRecording()`                | Get last recording path | `string                    | null` |
+| `lastRecording()`                | Get last recording path | `string` or `null`         |
 
 ### Playback Functions
 
@@ -200,6 +210,7 @@ playerSubscription.remove();
 | -------------------------------------- | --------------------------------- | ----------------- |
 | `setVADEnabled(enabled)`               | Enable/disable VAD                | `string` - Status |
 | `setVoiceActivityThreshold(threshold)` | Set detection threshold (0.0-1.0) | `string` - Status |
+| `setVADEventMode(mode, throttleMs?)`   | Control event frequency           | `string` - Status |
 
 ### Audio Analysis
 
@@ -244,25 +255,16 @@ addRecorderAmplitudeListener((event: AudioMeteringEvent) => {
 
 ```typescript
 addVoiceActivityListener((event: VoiceActivityEvent) => {
-  // event.isVoiceDetected: boolean - Whether voice is detected
-  // event.confidence: number (0.0-1.0) - Confidence score
-  //   iOS: Real ML confidence (varies 0.0-1.0)
-  //   Android: Fixed (0.85 for voice, 0.15 for silence)
-  // event.eventType: string - Event type
-  //   Android: 'speech_start' | 'silence_start'
-  //   iOS: Continuous events
-  // event.timestamp: number - Event timestamp
-  // event.audioLevel: number - Audio amplitude in dB (optional)
-  // event.isStateChange: boolean - Whether this is a state change
-  // event.platformData: object - Platform-specific metadata
+  // event.isVoiceDetected: boolean - Is someone speaking?
+  // event.confidence: number - How confident is the detection (0.0-1.0)
+  // event.timestamp: number - When this happened
+  // event.stateDuration: number - How long in this state (ms)
+  // event.isStateChange: boolean - Did the state just change?
+  // event.previousState: boolean - What was the previous state
+  // event.eventType: 'speech_start' | 'speech_continue' | 'silence_start' | 'silence_continue'
+  // event.audioLevel: number - Current audio level in dB (Android only)
 });
 ```
-
-**Platform Differences:**
-
-- **iOS**: Events fire continuously (~60-100ms intervals) with real-time ML
-  confidence
-- **Android**: Events fire only on state changes with fixed confidence values
 
 #### Playback Events
 
@@ -313,6 +315,52 @@ setVoiceActivityThreshold(0.7);
 setVADEnabled(true);
 ```
 
+### Real-world example: Voice-activated recording
+
+#### Example 1
+
+```typescript
+import {
+  setVADEnabled,
+  setVADEventMode,
+  addVoiceActivityListener,
+} from 'expo-audio-studio';
+
+// Only notify on state changes for battery efficiency
+setVADEventMode('onChange');
+setVADEnabled(true);
+
+const subscription = addVoiceActivityListener(event => {
+  if (event.eventType === 'speech_start') {
+    console.log('🎤 Voice detected');
+  } else if (event.eventType === 'silence_start') {
+    console.log('🔇 Silence detected');
+  }
+});
+```
+
+#### Example 2
+
+```typescript
+import {
+  setVADEnabled,
+  setVADEventMode,
+  addVoiceActivityListener,
+} from 'expo-audio-studio';
+
+// Only notify in every 250ms
+setVADEventMode('throttled', 250);
+setVADEnabled(true);
+
+const subscription = addVoiceActivityListener(event => {
+  if (event.isVoiceDetected) {
+    console.log('🎤 Voice detected');
+  } else {
+    console.log('🔇 Silence detected');
+  }
+});
+```
+
 ### Get waveform data
 
 ```typescript
@@ -354,22 +402,50 @@ We're planning to add more format options in the future.
 
 ## Voice detection details
 
+Both iOS and Android now work the same way, sending events whenever you want
+them!
+
+### Controlling event frequency
+
+You can choose how often you want to receive voice detection events:
+
+```typescript
+// Get events for every audio frame processed (~32ms, about 30 per second)
+// Perfect for real-time visualizations or instant response
+setVADEventMode('onEveryFrame');
+
+// Only get notified when voice state changes (speech starts/stops)
+// Battery-friendly and great for simple on/off detection
+setVADEventMode('onChange');
+
+// Get updates every X milliseconds, plus immediate state changes
+// Nice balance between real-time and performance
+setVADEventMode('throttled', 250); // every 250ms
+```
+
+**Which one should you use?**
+
+- Building a live voice visualizer? Use `onEveryFrame`
+- Just need to know when someone starts/stops talking? Use `onChange`
+- Want periodic updates without overwhelming your app? Use `throttled` with
+  100-250ms
+
+You can change the mode anytime, even while recording is happening. The setting
+sticks around until you change it again.
+
+### Under the hood
+
 **iOS** uses Apple's Core ML Sound Classification:
 
-- Sends events continuously (~60-100ms intervals)
-- Provides real confidence scores (0.0-1.0)
-- Analyzes 1.5 second windows with 90% overlap
+- Real confidence scores from machine learning (0.0-1.0)
+- Analyzes audio in 1.5 second windows with smart overlap
+- Works on iOS 13.0 and up
 
 **Android** uses [Silero VAD](https://github.com/gkonovalov/android-vad):
 
-- Only sends events when voice starts/stops
-- Uses fixed confidence values (0.85 for voice, 0.15 for silence)
-- Analyzes 32ms frames at 16kHz
-
-**Configuration:**
-
-- iOS: Adjustable detection threshold (0.0-1.0)
-- Android: 300ms silence duration, 50ms speech duration
+- Lightning-fast neural network
+- Fixed confidence values (0.85 for voice, 0.15 for silence)
+- Processes 32ms chunks at 16kHz
 
 ## Platform requirements
 

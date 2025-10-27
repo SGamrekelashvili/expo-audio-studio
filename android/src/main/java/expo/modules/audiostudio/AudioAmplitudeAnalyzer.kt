@@ -15,12 +15,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
-/**
- * High-performance audio amplitude analyzer for visualization bars
- * Uses Android MediaExtractor for efficient audio processing
- * 
- * MEMORY OPTIMIZED: Use object for static access to avoid object creation
- */
+
 object AudioAmplitudeAnalyzer {
     
     private const val TAG = "AudioAmplitudeAnalyzer"
@@ -193,7 +188,6 @@ object AudioAmplitudeAnalyzer {
             
             Log.d(TAG, "Audio format - Sample rate: $sampleRate Hz, Channels: $channelCount")
             
-            // MEMORY OPTIMIZED: Use streaming approach to avoid large array allocation
             val amplitudes = extractAudioSamplesOptimized(extractor, sampleRate, channelCount, barsCount)
             
             if (amplitudes.isEmpty()) {
@@ -234,10 +228,6 @@ object AudioAmplitudeAnalyzer {
         }
     }
     
-    /**
-     * MEMORY OPTIMIZED: Extracts audio samples with streaming amplitude calculation
-     * Processes data in chunks to avoid large memory allocation
-     */
     private fun extractAudioSamplesOptimized(extractor: MediaExtractor, sampleRate: Int, channelCount: Int, barsCount: Int): FloatArray {
         val amplitudes = FloatArray(barsCount)
         val buffer = ByteBuffer.allocate(CHUNK_SIZE)
