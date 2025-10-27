@@ -175,7 +175,7 @@ const playerSubscription = addPlayerStatusListener(event => {
 startPlaying('/path/to/audio/file.wav');
 
 // Control playback speed
-setPlaybackSpeed('1.5'); // 1.5x speed
+setPlaybackSpeed(1.5); // 1.5x speed
 
 // Cleanup
 playerSubscription.remove();
@@ -192,25 +192,29 @@ playerSubscription.remove();
 | `pauseRecording()`               | Pause recording         | `string` - Status message  |
 | `resumeRecording()`              | Resume recording        | `string` - Status message  |
 | `lastRecording()`                | Get last recording path | `string` or `null`         |
+| `getCurrentMeterLevel()`         | Get current audio level | `number`                   |
 
 ### Playback Functions
 
-| Function                  | Description                  | Returns           |
-| ------------------------- | ---------------------------- | ----------------- |
-| `startPlaying(path)`      | Start audio playback         | `string` - Status |
-| `stopPlayer()`            | Stop playback                | `string` - Status |
-| `pausePlayer()`           | Pause playback               | `string` - Status |
-| `resumePlayer()`          | Resume playback              | `string` - Status |
-| `setPlaybackSpeed(speed)` | Set playback speed (0.5-2.0) | `string` - Status |
-| `seekTo(position)`        | Seek to position in seconds  | `string` - Status |
+| Function                  | Description                   | Returns           |
+| ------------------------- | ----------------------------- | ----------------- |
+| `startPlaying(path)`      | Start audio playback          | `string` - Status |
+| `stopPlaying()`           | Stop playback                 | `string` - Status |
+| `pausePlayer()`           | Pause playback                | `string` - Status |
+| `resumePlayer()`          | Resume playback               | `string` - Status |
+| `setPlaybackSpeed(speed)` | Set playback speed (0.5-2.0)  | `string` - Status |
+| `seekTo(position)`        | Seek to position in seconds   | `string` - Status |
+| `getCurrentPosition()`    | Get current playback position | `number`          |
 
 ### Voice Activity Detection
 
-| Function                               | Description                       | Returns           |
-| -------------------------------------- | --------------------------------- | ----------------- |
-| `setVADEnabled(enabled)`               | Enable/disable VAD                | `string` - Status |
-| `setVoiceActivityThreshold(threshold)` | Set detection threshold (0.0-1.0) | `string` - Status |
-| `setVADEventMode(mode, throttleMs?)`   | Control event frequency           | `string` - Status |
+| Function                               | Description                                    | Returns           |
+| -------------------------------------- | ---------------------------------------------- | ----------------- |
+| `setVADEnabled(enabled)`               | Enable/disable VAD                             | `string` - Status |
+| `setVoiceActivityThreshold(threshold)` | Set detection threshold (0.0-1.0)              | `string` - Status |
+| `setVADEventMode(mode, throttleMs?)`   | Control event frequency                        | `string` - Status |
+| `getIsVADActive()`                     | Whether VAD is currently processing audio      | `boolean`         |
+| `getIsVADEnabled()`                    | Whether VAD is enabled by user preference      | `boolean`         |
 
 ### Audio Analysis
 
@@ -227,15 +231,7 @@ playerSubscription.remove();
 | `listRecordings(directoryPath?)`        | List audio files        | `array` - File list    |
 | `joinAudioFiles(filePaths, outputPath)` | Concatenate audio files | `string` - Output path |
 
-### Properties
-
-| Property          | Type      | Description                         |
-| ----------------- | --------- | ----------------------------------- |
-| `isVADActive`     | `boolean` | Whether VAD is currently processing |
-| `isVADEnabled`    | `boolean` | Whether VAD is enabled              |
-| `isPaused`        | `boolean` | Whether recording is paused         |
-| `meterLevel`      | `number`  | Current audio level                 |
-| `currentPosition` | `number`  | Current playback position           |
+ 
 
 ### Event Listeners
 
@@ -397,12 +393,12 @@ provides good quality while keeping file sizes reasonable.
 - Android: PCM using
   [AndroidWaveRecorder](https://github.com/squti/Android-Wave-Recorder)
 
-We're planning to add more format options in the future.
+Additional formats are on the roadmap.
 
 ## Voice detection details
 
-Both iOS and Android now work the same way, sending events whenever you want
-them!
+Both iOS and Android now fire the same events, so you can expect identical
+behavior.
 
 ### Controlling event frequency
 
@@ -438,17 +434,17 @@ sticks around until you change it again.
 
 - Real confidence scores from machine learning (0.0-1.0)
 - Analyzes audio in 1.5 second windows with smart overlap
-- Works on iOS 13.0 and up
+- Works on iOS 14.0 and up
 
 **Android** uses [Silero VAD](https://github.com/gkonovalov/android-vad):
 
-- Lightning-fast neural network
+- Compact neural network implementation
 - Fixed confidence values (0.85 for voice, 0.15 for silence)
-- Processes 32ms chunks at 16kHz
+- Processes 32 ms chunks at 16 kHz
 
 ## Platform requirements
 
-- **iOS**: 13.0 or higher (for voice detection)
+- **iOS**: 14.0 or higher (for voice detection)
 - **Android**: API 21 (Android 5.0) or higher
 - **Web**: Coming soon
 
@@ -494,32 +490,29 @@ npm test
 
 ## What's next
 
-**Streaming & Real-time Processing**
+**Streaming & real-time processing**
 
-- Stream audio chunks in real-time (configurable chunk sizes) - **mostly
-  requested feature**
-- Access raw PCM16 data during recording - **mostly requested feature**
-- Lower latency for live transcription and analysis - **mostly requested
-  feature**
-- Useful for speech-to-text and real-time processing - **mostly requested
-  feature**
+- Stream audio chunks in real time with configurable chunk sizes
+- Access raw PCM16 data during recording
+- Reduce latency for live transcription and other low-latency pipelines
+- Use the stream for speech-to-text or custom analysis
 
 **More formats**
 
-- M4A, MP3, FLAC recording options
+- M4A, MP3, and FLAC recording options
 - Configurable quality settings
 
 **Web support**
 
 - WebRTC-based recording
-- Browser voice detection
-- Same API across all platforms
+- Browser-side voice detection
+- Same API across native and web targets
 
 **Other features**
 
 - Stereo and multi-channel recording
 - Real-time audio effects
-- Advanced analytics
+- Additional analytics hooks
 
 Got ideas?
 [Open a discussion](https://github.com/sgamrekelashvili/expo-audio-studio/discussions)!
