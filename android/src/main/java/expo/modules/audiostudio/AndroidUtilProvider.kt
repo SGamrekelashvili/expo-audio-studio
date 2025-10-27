@@ -2,7 +2,6 @@ package expo.modules.audiostudio
 
 import android.content.Context
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 class AndroidUtilProvider : UtilProvider {
     override fun convertToSecondsFormatted(seconds: Float): String {

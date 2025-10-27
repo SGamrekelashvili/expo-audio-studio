@@ -6,10 +6,8 @@ import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.util.Log
 import java.io.File
-import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.abs
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
@@ -319,104 +317,5 @@ object AudioAmplitudeAnalyzer {
         Log.d(TAG, "Finished optimized extraction. Total samples: $totalSamples, bars: $currentBarIndex")
         
         return amplitudes
-    }
-    
-    /**
-     * Calculates amplitude bars using RMS (Root Mean Square) for optimal visualization
-     */
-    private fun calculateAmplitudes(samples: ShortArray, barsCount: Int): FloatArray {
-        val totalSamples = samples.size
-        val samplesPerBar = totalSamples / barsCount
-        
-        if (samplesPerBar <= 0) {
-            // If we have fewer samples than bars, return what we have
-            return samples.map { abs(it.toFloat()) / Short.MAX_VALUE }.toFloatArray()
-        }
-        
-        val amplitudes = FloatArray(barsCount)
-        
-        Log.d(TAG, "Calculating amplitudes: $totalSamples samples -> $barsCount bars ($samplesPerBar samples per bar)")
-        
-        for (barIndex in 0 until barsCount) {
-            val startIndex = barIndex * samplesPerBar
-            val endIndex = min(startIndex + samplesPerBar, totalSamples)
-            
-            if (startIndex >= totalSamples) {
-                amplitudes[barIndex] = 0.0f
-                continue
-            }
-            
-            // Calculate RMS amplitude for this bar
-            var sumOfSquares = 0.0
-            var sampleCount = 0
-            
-            for (i in startIndex until endIndex) {
-                val normalizedSample = samples[i].toFloat() / Short.MAX_VALUE
-                sumOfSquares += normalizedSample * normalizedSample
-                sampleCount++
-            }
-            
-            val rmsAmplitude = if (sampleCount > 0) {
-                sqrt(sumOfSquares / sampleCount).toFloat()
-            } else {
-                0.0f
-            }
-            
-            // Convert RMS to dB (same format as recording amplitudes)
-            val dBValue = if (rmsAmplitude > 0) {
-                20.0f * log10(rmsAmplitude)
-            } else {
-                -160.0f // Silence threshold
-            }
-            
-            amplitudes[barIndex] = dBValue
-        }
-        
-        // Normalize amplitudes to 0.0-1.0 range
-        val maxAmplitude = amplitudes.maxOrNull() ?: 1.0f
-        if (maxAmplitude > 0) {
-            for (i in amplitudes.indices) {
-                amplitudes[i] = amplitudes[i] / maxAmplitude
-            }
-        }
-        
-        return amplitudes
-    }
-    
-    /**
-     * Alternative method for WAV files - direct PCM data extraction for maximum performance
-     */
-    private fun extractWavSamples(filePath: String): ShortArray? {
-        return try {
-            val file = File(filePath)
-            if (!file.name.lowercase().endsWith(".wav")) {
-                return null // Not a WAV file
-            }
-            
-            val inputStream = FileInputStream(file)
-            val samples = mutableListOf<Short>()
-            
-            // Skip WAV header (44 bytes)
-            inputStream.skip(44)
-            
-            val buffer = ByteArray(CHUNK_SIZE)
-            var bytesRead: Int
-            
-            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                val byteBuffer = ByteBuffer.wrap(buffer, 0, bytesRead)
-                byteBuffer.order(ByteOrder.LITTLE_ENDIAN)
-                
-                while (byteBuffer.remaining() >= 2) {
-                    samples.add(byteBuffer.short)
-                }
-            }
-            
-            inputStream.close()
-            samples.toShortArray()
-            
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to extract WAV samples directly: ${e.message}")
-            null
-        }
     }
 }
