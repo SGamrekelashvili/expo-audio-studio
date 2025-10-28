@@ -8,24 +8,9 @@ import {
   Alert,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import {
-  startPlaying,
-  stopPlaying,
-  pausePlayer,
-  resumePlayer,
-  seekTo,
-  getDuration,
-  addPlayerStatusListener,
-  listRecordings,
-  configureAudioSession,
-  activateAudioSession,
-  type PlayerStatusChangeEvent,
-  getCurrentPosition,
-  getCurrentMeterLevel,
-  getPlayerStatus,
-
-} from 'expo-audio-studio';
+import ExpoAudioStudio from 'expo-audio-studio';
 import { AudioRecording } from './types';
+import { PlayerStatusChangeEvent } from 'expo-audio-studio/types';
 
 const colors = {
   primary: '#6366F1',
@@ -51,7 +36,7 @@ export default function AudioPlayer() {
   }, []);
 
   useEffect(() => {
-    const subscription = addPlayerStatusListener((event: PlayerStatusChangeEvent) => {
+    const subscription = ExpoAudioStudio.addPlayerStatusListener((event: PlayerStatusChangeEvent) => {
       setIsPlaying(event.isPlaying);
       
       if (event.didJustFinish) {
@@ -70,7 +55,7 @@ export default function AudioPlayer() {
     if (isPlaying && !isPaused) {
       interval = setInterval(() => {
         try {
-          const position = getCurrentPosition();
+          const position = ExpoAudioStudio.currentPosition;
           
           setPlaybackPosition(position);
         } catch (error) {
@@ -88,7 +73,7 @@ export default function AudioPlayer() {
 
   const loadRecordings = useCallback(async () => {
     try {
-      const files = listRecordings();
+      const files = ExpoAudioStudio.listRecordings();
       
       const recordings: AudioRecording[] = files.map((file) => {
         return {
@@ -110,7 +95,7 @@ export default function AudioPlayer() {
     try {
       // Stop current playback if any
       if (isPlaying || isPaused) {
-        stopPlaying();
+        ExpoAudioStudio.stopPlaying();
         setIsPlaying(false);
       }
 
@@ -119,7 +104,7 @@ export default function AudioPlayer() {
       setIsPaused(false);
 
       // Get accurate duration
-      const duration = getDuration(recording.path);
+      const duration = ExpoAudioStudio.getDuration(recording.path);
       setCurrentDuration(duration);
     } catch (error) {
       console.error('Error selecting recording:', error);
@@ -136,7 +121,7 @@ export default function AudioPlayer() {
     try {
       if (!isPlaying && !isPaused) {
         // Start playback
-        await configureAudioSession({
+        await ExpoAudioStudio.configureAudioSession({
           category: 'playback',
           mode: 'default',
           options: {
@@ -145,18 +130,18 @@ export default function AudioPlayer() {
             allowBluetoothA2DP: true,
           },
         });
-        await activateAudioSession();
+        await ExpoAudioStudio.activateAudioSession();
         
-        startPlaying(selectedRecording.path);
+        ExpoAudioStudio.startPlaying(selectedRecording.path);
         setIsPlaying(true);
       } else if (isPlaying) {
         // Pause
-        pausePlayer();
+        ExpoAudioStudio.pausePlayer();
         setIsPaused(true);
         setIsPlaying(false);
       } else if (isPaused) {
         // Resume
-        resumePlayer();
+        ExpoAudioStudio.resumePlayer();
         setIsPaused(false);
         setIsPlaying(true);
       }
@@ -168,7 +153,7 @@ export default function AudioPlayer() {
 
   const handleStop = useCallback(() => {
     try {
-      stopPlaying();
+      ExpoAudioStudio.stopPlaying();
       setIsPlaying(false);
       setIsPaused(false);
       setPlaybackPosition(0);
@@ -185,7 +170,7 @@ export default function AudioPlayer() {
     }
 
     try {
-      seekTo(value);
+      ExpoAudioStudio.seekTo(value);
       setPlaybackPosition(value);
     } catch (error) {
       console.error('Seek error:', error);

@@ -9,23 +9,8 @@ import {
   Switch,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import {
-  startRecording,
-  stopRecording,
-  setVADEnabled,
-  setVoiceActivityThreshold,
-  addRecorderStatusListener,
-  addVoiceActivityListener,
-  addRecorderAmplitudeListener,
-  requestMicrophonePermission,
-  configureAudioSession,
-  activateAudioSession,
-  getIsVADActive,
-  getIsVADEnabled,
-  type AudioRecordingStateChangeEvent,
-  type VoiceActivityEvent,
-  type AudioMeteringEvent,
-} from 'expo-audio-studio';
+import ExpoAudioStudio from 'expo-audio-studio';
+import { AudioRecordingStateChangeEvent, VoiceActivityEvent, AudioMeteringEvent } from 'expo-audio-studio/types';
 
 const colors = {
   primary: '#6366F1',
@@ -56,7 +41,7 @@ export default function RecordingTab() {
   }, []);
 
   useEffect(() => {
-    const statusSub = addRecorderStatusListener((event: AudioRecordingStateChangeEvent) => {
+    const statusSub = ExpoAudioStudio.addRecorderStatusListener((event: AudioRecordingStateChangeEvent) => {
       setIsRecording(event.status === 'recording');
       
       if (event.status === 'error') {
@@ -65,11 +50,11 @@ export default function RecordingTab() {
       }
     });
 
-    const amplitudeSub = addRecorderAmplitudeListener((event: AudioMeteringEvent) => {
+    const amplitudeSub = ExpoAudioStudio.addRecorderAmplitudeListener((event: AudioMeteringEvent) => {
       setAmplitude(event.amplitude);
     });
 
-    const vadSub = addVoiceActivityListener((event: VoiceActivityEvent) => {
+    const vadSub = ExpoAudioStudio.addVoiceActivityListener((event: VoiceActivityEvent) => {
       setVoiceDetected(event.isVoiceDetected);
       setVoiceConfidence(event.confidence || 0);
     });
@@ -83,7 +68,7 @@ export default function RecordingTab() {
 
   const requestPermissions = async () => {
     try {
-      const result = await requestMicrophonePermission();
+      const result = await ExpoAudioStudio.requestMicrophonePermission();
       setHasPermission(result.granted);
     } catch (error) {
       console.error('Permission error:', error);
@@ -97,7 +82,7 @@ export default function RecordingTab() {
     }
 
     try {
-      await configureAudioSession({
+      await ExpoAudioStudio.configureAudioSession({
         category: 'playAndRecord',
         mode: 'default',
         options: {
@@ -106,9 +91,9 @@ export default function RecordingTab() {
           allowBluetoothA2DP: true,
         },
       });
-      await activateAudioSession();
+      await ExpoAudioStudio.activateAudioSession();
 
-      const path = startRecording();
+      const path = ExpoAudioStudio.startRecording();
       setRecordingPath(path);
       console.log('Recording started:', path);
     } catch (error) {
@@ -119,7 +104,7 @@ export default function RecordingTab() {
 
   const handleStopRecording = useCallback(() => {
     try {
-      const path = stopRecording();
+      const path = ExpoAudioStudio.stopRecording();
       setRecordingPath(path);
       setIsRecording(false);
       console.log('Recording stopped:', path);
@@ -132,7 +117,7 @@ export default function RecordingTab() {
 
   const handleToggleVAD = useCallback((value: boolean) => {
     try {
-      setVADEnabled(value);
+       ExpoAudioStudio.setVADEnabled(value);
       setVadEnabledState(value);
       
       if (!value) {
@@ -148,7 +133,7 @@ export default function RecordingTab() {
   const handleThresholdChange = useCallback((value: number) => {
     setVadThreshold(value);
     try {
-      setVoiceActivityThreshold(value);
+       ExpoAudioStudio.setVoiceActivityThreshold(value);
     } catch (error) {
       console.error('Threshold error:', error);
     }

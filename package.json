@@ -76,18 +76,11 @@
     "react-native": "*"
   },
   "lint-staged": {
-    "src/**/*.{ts,tsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "src/**/*.{js,jsx,json,md}": [
-      "prettier --write"
-    ]
+    "src/**/*.{ts,tsx}": ["eslint --fix", "prettier --write"],
+    "src/**/*.{js,jsx,json,md}": ["prettier --write"]
   },
   "commitlint": {
-    "extends": [
-      "@commitlint/config-conventional"
-    ]
+    "extends": ["@commitlint/config-conventional"]
   },
   "engines": {
     "node": ">=20"

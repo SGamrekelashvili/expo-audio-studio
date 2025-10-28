@@ -94,31 +94,26 @@ npx expo run:android
 ### Record audio
 
 ```typescript
-import {
-  startRecording,
-  stopRecording,
-  addRecorderStatusListener,
-  requestMicrophonePermission,
-} from 'expo-audio-studio';
+import ExpoAudioStudio from 'expo-audio-studio';
 
 // Request permission first
-const permission = await requestMicrophonePermission();
+const permission = await ExpoAudioStudio.requestMicrophonePermission();
 if (!permission.granted) {
   console.log('Microphone permission denied');
   return;
 }
 
 // Listen to recording events
-const subscription = addRecorderStatusListener(event => {
+const subscription = ExpoAudioStudio.addRecorderStatusListener(event => {
   console.log('Recording status:', event.status);
 });
 
 // Start recording
-const filePath = startRecording();
+const filePath = ExpoAudioStudio.startRecording();
 console.log('Recording to:', filePath);
 
 // Stop recording
-const finalPath = stopRecording();
+const finalPath = ExpoAudioStudio.stopRecording();
 console.log('Recording saved to:', finalPath);
 
 // Cleanup
@@ -128,23 +123,18 @@ subscription.remove();
 ### Detect speech
 
 ```typescript
-import {
-  setVADEnabled,
-  setVADEventMode,
-  addVoiceActivityListener,
-  startRecording,
-} from 'expo-audio-studio';
+import ExpoAudioStudio from 'expo-audio-studio';
 
 // Choose how often you want events
-setVADEventMode('onEveryFrame'); // Real-time (default)
+ExpoAudioStudio.setVADEventMode('onEveryFrame'); // Real-time (default)
 // setVADEventMode('onChange');  // Only state changes
 // setVADEventMode('throttled', 100); // Every 100ms
 
 // Enable VAD
-setVADEnabled(true);
+ExpoAudioStudio.setVADEnabled(true);
 
 // Listen to voice activity
-const vadSubscription = addVoiceActivityListener(event => {
+const vadSubscription = ExpoAudioStudio.addVoiceActivityListener(event => {
   if (event.isStateChange) {
     // State just changed - someone started or stopped talking
     console.log(event.isVoiceDetected ? 'Started talking!' : 'Stopped talking');
@@ -154,28 +144,24 @@ const vadSubscription = addVoiceActivityListener(event => {
 });
 
 // Start recording - VAD will automatically start
-startRecording();
+ExpoAudioStudio.startRecording();
 ```
 
 ### Play audio
 
 ```typescript
-import {
-  startPlaying,
-  setPlaybackSpeed,
-  addPlayerStatusListener,
-} from 'expo-audio-studio';
+import ExpoAudioStudio from 'expo-audio-studio';
 
 // Listen to playback events
-const playerSubscription = addPlayerStatusListener(event => {
+const playerSubscription = ExpoAudioStudio.addPlayerStatusListener(event => {
   console.log('Playing:', event.isPlaying);
 });
 
 // Start playback
-startPlaying('/path/to/audio/file.wav');
+ExpoAudioStudio.startPlaying('/path/to/audio/file.wav');
 
 // Control playback speed
-setPlaybackSpeed(1.5); // 1.5x speed
+ExpoAudioStudio.setPlaybackSpeed(1.5); // 1.5x speed
 
 // Cleanup
 playerSubscription.remove();
@@ -192,29 +178,25 @@ playerSubscription.remove();
 | `pauseRecording()`               | Pause recording         | `string` - Status message  |
 | `resumeRecording()`              | Resume recording        | `string` - Status message  |
 | `lastRecording()`                | Get last recording path | `string` or `null`         |
-| `getCurrentMeterLevel()`         | Get current audio level | `number`                   |
 
 ### Playback Functions
 
-| Function                  | Description                   | Returns           |
-| ------------------------- | ----------------------------- | ----------------- |
-| `startPlaying(path)`      | Start audio playback          | `string` - Status |
-| `stopPlaying()`           | Stop playback                 | `string` - Status |
-| `pausePlayer()`           | Pause playback                | `string` - Status |
-| `resumePlayer()`          | Resume playback               | `string` - Status |
-| `setPlaybackSpeed(speed)` | Set playback speed (0.5-2.0)  | `string` - Status |
-| `seekTo(position)`        | Seek to position in seconds   | `string` - Status |
-| `getCurrentPosition()`    | Get current playback position | `number`          |
+| Function                  | Description                  | Returns           |
+| ------------------------- | ---------------------------- | ----------------- |
+| `startPlaying(path)`      | Start audio playback         | `string` - Status |
+| `stopPlaying()`           | Stop playback                | `string` - Status |
+| `pausePlayer()`           | Pause playback               | `string` - Status |
+| `resumePlayer()`          | Resume playback              | `string` - Status |
+| `setPlaybackSpeed(speed)` | Set playback speed (0.5-2.0) | `string` - Status |
+| `seekTo(position)`        | Seek to position in seconds  | `string` - Status |
 
 ### Voice Activity Detection
 
-| Function                               | Description                               | Returns           |
-| -------------------------------------- | ----------------------------------------- | ----------------- |
-| `setVADEnabled(enabled)`               | Enable/disable VAD                        | `string` - Status |
-| `setVoiceActivityThreshold(threshold)` | Set detection threshold (0.0-1.0)         | `string` - Status |
-| `setVADEventMode(mode, throttleMs?)`   | Control event frequency                   | `string` - Status |
-| `getIsVADActive()`                     | Whether VAD is currently processing audio | `boolean`         |
-| `getIsVADEnabled()`                    | Whether VAD is enabled by user preference | `boolean`         |
+| Function                               | Description                       | Returns           |
+| -------------------------------------- | --------------------------------- | ----------------- |
+| `setVADEnabled(enabled)`               | Enable/disable VAD                | `string` - Status |
+| `setVoiceActivityThreshold(threshold)` | Set detection threshold (0.0-1.0) | `string` - Status |
+| `setVADEventMode(mode, throttleMs?)`   | Control event frequency           | `string` - Status |
 
 ### Audio Analysis
 
@@ -223,6 +205,16 @@ playerSubscription.remove();
 | `getDuration(uri)`                       | Get audio file duration       | `number` - Duration in seconds |
 | `getAudioAmplitudes(fileUrl, barsCount)` | Get waveform data (dB values) | `object` - Amplitude data      |
 | `setAmplitudeUpdateFrequency(hz)`        | Set amplitude update rate     | `string` - Status              |
+
+### Constants
+
+| Constant          | Description                                  | Returns   |
+| ----------------- | -------------------------------------------- | --------- |
+| `currentPosition` | Current playback position in seconds         | `number`  |
+| `meterLevel`      | Current audio level during recording (in dB) | `number`  |
+| `playerStatus`    | Detailed player status information           | `object`  |
+| `isVADActive`     | Whether VAD is currently active              | `boolean` |
+| `isVADEnabled`    | Whether VAD is enabled by user preference    | `boolean` |
 
 ### File Management
 
@@ -281,9 +273,9 @@ const filePath = startRecording('/path/to/custom/directory');
 > this can freeze your app.
 
 ```typescript
-import { configureAudioSession, activateAudioSession } from 'expo-audio-studio';
+import ExpoAudioStudio from 'expo-audio-studio';
 
-await configureAudioSession({
+await ExpoAudioStudio.configureAudioSession({
   category: 'playAndRecord',
   mode: 'default',
   options: {
@@ -292,19 +284,19 @@ await configureAudioSession({
   },
 });
 
-await activateAudioSession();
+await ExpoAudioStudio.activateAudioSession();
 ```
 
 ### Adjust voice detection sensitivity
 
 ```typescript
 // More sensitive (for quiet rooms)
-setVoiceActivityThreshold(0.3);
+ExpoAudioStudio.setVoiceActivityThreshold(0.3);
 
 // Less sensitive (for noisy places)
-setVoiceActivityThreshold(0.7);
+ExpoAudioStudio.setVoiceActivityThreshold(0.7);
 
-setVADEnabled(true);
+ExpoAudioStudio.setVADEnabled(true);
 ```
 
 ### Real-world example: Voice-activated recording
@@ -312,17 +304,13 @@ setVADEnabled(true);
 #### Example 1
 
 ```typescript
-import {
-  setVADEnabled,
-  setVADEventMode,
-  addVoiceActivityListener,
-} from 'expo-audio-studio';
+import ExpoAudioStudio from 'expo-audio-studio';
 
 // Only notify on state changes for battery efficiency
-setVADEventMode('onChange');
-setVADEnabled(true);
+ExpoAudioStudio.setVADEventMode('onChange');
+ExpoAudioStudio.setVADEnabled(true);
 
-const subscription = addVoiceActivityListener(event => {
+const subscription = ExpoAudioStudio.addVoiceActivityListener(event => {
   if (event.eventType === 'speech_start') {
     console.log('🎤 Voice detected');
   } else if (event.eventType === 'silence_start') {
@@ -334,17 +322,13 @@ const subscription = addVoiceActivityListener(event => {
 #### Example 2
 
 ```typescript
-import {
-  setVADEnabled,
-  setVADEventMode,
-  addVoiceActivityListener,
-} from 'expo-audio-studio';
+import ExpoAudioStudio from 'expo-audio-studio';
 
 // Only notify in every 250ms
-setVADEventMode('throttled', 250);
-setVADEnabled(true);
+ExpoAudioStudio.setVADEventMode('throttled', 250);
+ExpoAudioStudio.setVADEnabled(true);
 
-const subscription = addVoiceActivityListener(event => {
+const subscription = ExpoAudioStudio.addVoiceActivityListener(event => {
   if (event.isVoiceDetected) {
     console.log('Voice detected');
   } else {
@@ -356,7 +340,10 @@ const subscription = addVoiceActivityListener(event => {
 ### Get waveform data
 
 ```typescript
-const waveformData = getAudioAmplitudes('/path/to/file.wav', 100);
+const waveformData = ExpoAudioStudio.getAudioAmplitudes(
+  '/path/to/file.wav',
+  100
+);
 console.log('Amplitude values:', waveformData.amplitudes);
 
 // Normalize for UI visualization (dB to 0-1 range)
@@ -364,7 +351,7 @@ const normalized = waveformData.amplitudes.map(dB =>
   Math.max(0, (dB + 60) / 60)
 );
 
-const duration = getDuration('/path/to/file.wav');
+const duration = ExpoAudioStudio.getDuration('/path/to/file.wav');
 ```
 
 ### Merge audio files
@@ -377,7 +364,7 @@ const inputFiles = [
 ];
 
 const outputPath = '/path/to/joined_audio.wav';
-const result = joinAudioFiles(inputFiles, outputPath);
+const result = ExpoAudioStudio.joinAudioFiles(inputFiles, outputPath);
 console.log('Joined file created:', result);
 ```
 
@@ -404,15 +391,15 @@ You can choose how often you want to receive voice detection events:
 ```typescript
 // Get events for every audio frame processed (~32ms, about 30 per second)
 // Perfect for real-time visualizations or instant response
-setVADEventMode('onEveryFrame');
+ExpoAudioStudio.setVADEventMode('onEveryFrame');
 
 // Only get notified when voice state changes (speech starts/stops)
 // Battery-friendly and great for simple on/off detection
-setVADEventMode('onChange');
+ExpoAudioStudio.setVADEventMode('onChange');
 
 // Get updates every X milliseconds, plus immediate state changes
 // Nice balance between real-time and performance
-setVADEventMode('throttled', 250); // every 250ms
+ExpoAudioStudio.setVADEventMode('throttled', 250); // every 250ms
 ```
 
 **Which one should you use?**

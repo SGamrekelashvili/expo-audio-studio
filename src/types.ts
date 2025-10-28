@@ -43,6 +43,7 @@ export type AudioSessionOptions = {
 };
 
 /**
+ *
  * Audio session configuration
  */
 export type AudioSessionConfig = {
