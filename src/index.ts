@@ -491,7 +491,6 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
   deactivateAudioSession(): Promise<void>;
 }
 
-// This call loads the native module object from the JSI.
-export default requireNativeModule<ExpoAudioStudioModule>(
-  'ExpoAudioStudio'
-) as ExpoAudioStudioModule;
+const ExpoAudioStudio = requireNativeModule<ExpoAudioStudioModule>('ExpoAudioStudio');
+
+export default ExpoAudioStudio;
