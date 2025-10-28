@@ -15,13 +15,7 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
     private var _player: MediaPlayer? = null
     private var cachedDuration: Int = 0
     private var isPaused: Boolean = false
-    private val _playerStatusStateFlow =
-        PlayerProgress(
-            percentage = 0f,
-            currentSeconds = 0,
-            duration = 0
-        )
-
+    private var hasCompleted: Boolean = false
 
 
     override fun preparePlayer(
@@ -34,6 +28,7 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         playbackParams.setAudioFallbackMode(
             PlaybackParams.AUDIO_FALLBACK_MODE_DEFAULT
         )
+        hasCompleted = false
 
         return try {
             _player = MediaPlayer().apply {
@@ -44,24 +39,23 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
                         .setLegacyStreamType(AudioManager.STREAM_MUSIC)
                         .build()
                 )
-                
+
+
                 // Handle different URI schemes (same logic as startPlaying)
                 Log.d(TAG, "Preparing audio from: $fileName")
                 try {
                     when {
                         // Handle assets with asset:// prefix
                         fileName.startsWith("asset://") -> {
-                            Log.d(TAG, "Preparing from assets folder with asset:// prefix")
                             val assetName = fileName.replace("asset://", "")
-                            Log.d(TAG, "Asset name: $assetName")
-                            
+
                             val afd = context.assets.openFd(assetName)
                             setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                             afd.close()
                         }
                         // Check if it's a relative asset path (no prefix)
                         !fileName.contains("/") && !fileName.contains("\\") -> {
-                            
+
                             try {
                                 val afd = context.assets.openFd(fileName)
                                 setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
@@ -90,23 +84,14 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
                     Log.e(TAG, "Error setting up data source: ${e.message}")
                     throw e
                 }
-                
+
                 // PREPARE but DON'T START
                 prepare()
                 cachedDuration = duration
                 setPlaybackParams(playbackParams)
                 // Set volume to maximum
                 setVolume(1.0f, 1.0f)
-                
-                // Set completion listener but don't start playing
-                setOnCompletionListener {
-                    val result = mapOf(
-                        "isPlaying" to false,
-                        "didJustFinish" to true
-                    )
-                    AudioEndFunction(result)
-                }
-                
+
                 Log.d(TAG, "Player prepared successfully, ready for playback")
             }
             currentFileName = fileName  // Track the prepared file
@@ -119,14 +104,23 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
     }
 
     private var currentFileName: String? = null  // Track current prepared file
-    
+
     override fun startPlaying(
         fileName: String,
         AudioEndFunction: (result: Map<String, Boolean>) -> Unit
     ): Boolean {
         // Check if we already have a prepared player for THIS SPECIFIC file
         _player?.let { existingPlayer ->
+            hasCompleted = false
             try {
+                existingPlayer.setOnCompletionListener {
+                    val result = mapOf(
+                        "isPlaying" to false,
+                        "didJustFinish" to true,
+                    )
+                    hasCompleted = true
+                    AudioEndFunction(result)
+                }
                 // Only use existing player if it's the SAME file and not playing
                 if (currentFileName == fileName && !existingPlayer.isPlaying) {
                     Log.d(TAG, "Using already prepared player for same file: $fileName")
@@ -137,16 +131,24 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
                 Log.w(TAG, "Error checking existing player, will prepare new one: ${e.message}")
             }
         }
-        
+
         // If no prepared player or error, prepare and start
         val prepareResult = preparePlayer(fileName, AudioEndFunction)
         if (!prepareResult) {
             return false
         }
-        
+
         // Now start the prepared player
         return try {
             _player?.let { player ->
+                player.setOnCompletionListener {
+                    val result = mapOf(
+                        "isPlaying" to false,
+                        "didJustFinish" to true,
+                    )
+                    hasCompleted = true
+                    AudioEndFunction(result)
+                }
                 player.start()
                 Log.d(TAG, "Started prepared player successfully")
                 true
@@ -169,7 +171,7 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
             false
         }
     }
-    
+
     override fun pausePlaying(): Boolean {
         return try {
             _player?.let {
@@ -185,7 +187,7 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
             false
         }
     }
-    
+
     override fun resumePlaying(): Boolean {
         return try {
             _player?.let {
@@ -201,7 +203,7 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
             false
         }
     }
-    
+
     override fun seekTo(position: Int): Boolean {
         return try {
             _player?.let {
@@ -214,17 +216,17 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
             false
         }
     }
-    
+
 
     override fun isPlaying(): Boolean {
         return _player?.isPlaying ?: false
     }
-    
+
 
     override fun getPlaybackSpeed(): Float {
         return playbackSpeed
     }
-    
+
 
     override fun getCurrentPosition(): Int {
         return try {
@@ -234,13 +236,13 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
             0
         }
     }
-    
+
 
     override fun getAudioDuration(uri: String, context: Context): Int {
         // Create a temporary MediaPlayer to get the duration
         val tempPlayer = MediaPlayer()
         var duration = 0
-        
+
         try {
             // Handle different URI schemes
             when {
@@ -272,10 +274,10 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
                     tempPlayer.setDataSource(uri)
                 }
             }
-            
+
             tempPlayer.prepare()
             duration = tempPlayer.duration
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Error getting audio duration: ${e.message}")
         } finally {
@@ -285,7 +287,7 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
                 Log.e(TAG, "Error releasing temp player: ${e.message}")
             }
         }
-        
+
         return duration
     }
 
@@ -309,15 +311,24 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         }
     }
 
-    override fun playerStatus(): PlayerProgress? {
-        return _player?.let {
-            PlayerProgress(
-                duration = it.duration,
-                currentSeconds= it.currentPosition,
-                percentage = (it?.currentPosition?.toFloat()?.div(it?.duration?.toFloat()!!)) ?: 0f
-            )
+    override fun playerStatus(): PlayerProgress {
+        val player = _player
+        if (player == null || player.duration <= 0) {
+            return PlayerProgress(duration = 0, currentSeconds = 0, percentage = 0f)
         }
+        val current =if(hasCompleted) player.duration else player.currentPosition
+
+        val duration = player.duration
+        val percentage = if (duration > 0) current.toFloat() / duration.toFloat() else 0f
+
+
+        return PlayerProgress(
+            duration = duration,
+            currentSeconds = current,
+            percentage = percentage
+        )
     }
+
 
     override fun releasePlayer() {
         stopAndReleasePlayer()
