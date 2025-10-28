@@ -1,6 +1,6 @@
 {
   "name": "expo-audio-studio",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Professional audio recording & playback with advanced Voice Activity Detection for React Native",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -76,11 +76,18 @@
     "react-native": "*"
   },
   "lint-staged": {
-    "src/**/*.{ts,tsx}": ["eslint --fix", "prettier --write"],
-    "src/**/*.{js,jsx,json,md}": ["prettier --write"]
+    "src/**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "src/**/*.{js,jsx,json,md}": [
+      "prettier --write"
+    ]
   },
   "commitlint": {
-    "extends": ["@commitlint/config-conventional"]
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
   },
   "engines": {
     "node": ">=20"

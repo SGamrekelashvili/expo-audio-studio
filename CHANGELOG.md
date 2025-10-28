@@ -1,3 +1,11 @@
+## [1.2.3](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.2...v1.2.3) (2025-10-28)
+
+
+### Bug Fixes
+
+* **android:** playback fully return duration when player end ([65518ce](https://github.com/SGamrekelashvili/expo-audio-studio/commit/65518cef169446405ef4e2a778f6c4899d451655))
+* **api:** update imports & docs ([e8f7bed](https://github.com/SGamrekelashvili/expo-audio-studio/commit/e8f7bed968cf0314f8bd6db7276da5d837831490))
+
 ## [1.2.2](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.1...v1.2.2) (2025-10-27)
 
 
