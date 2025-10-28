@@ -36,7 +36,7 @@ export default function AudioPlayer() {
   }, []);
 
   useEffect(() => {
-    const subscription = ExpoAudioStudio.addPlayerStatusListener((event: PlayerStatusChangeEvent) => {
+    const subscription = ExpoAudioStudio.addListener('onPlayerStatusChange', (event: PlayerStatusChangeEvent) => {
       setIsPlaying(event.isPlaying);
       
       if (event.didJustFinish) {
@@ -95,7 +95,7 @@ export default function AudioPlayer() {
     try {
       // Stop current playback if any
       if (isPlaying || isPaused) {
-        ExpoAudioStudio.stopPlaying();
+        ExpoAudioStudio.stopPlayer();
         setIsPlaying(false);
       }
 
@@ -153,7 +153,7 @@ export default function AudioPlayer() {
 
   const handleStop = useCallback(() => {
     try {
-      ExpoAudioStudio.stopPlaying();
+      ExpoAudioStudio.stopPlayer();
       setIsPlaying(false);
       setIsPaused(false);
       setPlaybackPosition(0);

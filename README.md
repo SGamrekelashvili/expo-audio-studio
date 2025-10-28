@@ -195,7 +195,7 @@ playerSubscription.remove();
 | Function                  | Description                  | Returns           |
 | ------------------------- | ---------------------------- | ----------------- |
 | `startPlaying(path)`      | Start audio playback         | `string` - Status |
-| `stopPlaying()`           | Stop playback                | `string` - Status |
+| `stopPlayer()`            | Stop playback                | `string` - Status |
 | `pausePlayer()`           | Pause playback               | `string` - Status |
 | `resumePlayer()`          | Resume playback              | `string` - Status |
 | `setPlaybackSpeed(speed)` | Set playback speed (0.5-2.0) | `string` - Status |
