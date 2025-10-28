@@ -1,3 +1,10 @@
+## [1.2.4](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.3...v1.2.4) (2025-10-28)
+
+
+### Bug Fixes
+
+* **api:** import ([4f26b69](https://github.com/SGamrekelashvili/expo-audio-studio/commit/4f26b6971ec0254b937632f09a52dfc42c4f282a))
+
 ## [1.2.3](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.2...v1.2.3) (2025-10-28)
 
 
