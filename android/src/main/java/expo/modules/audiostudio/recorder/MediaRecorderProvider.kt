@@ -7,6 +7,8 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.media.audiofx.NoiseSuppressor
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
@@ -16,16 +18,15 @@ import com.konovalov.vad.silero.VadSilero
 import com.konovalov.vad.silero.config.FrameSize
 import com.konovalov.vad.silero.config.Mode
 import com.konovalov.vad.silero.config.SampleRate
-
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
-import kotlin.math.*
+import kotlin.math.log10
+import kotlin.math.sqrt
 
 /**
- * MediaRecorderProvider with Silero VAD Integration
- * Optimized for 16kHz, mono, 16-bit configuration
+ * MediaRecorder + Silero VAD; 16kHz mono PCM, same public API.
  */
 class MediaRecorderProviderWithSileroVAD(
     context: Context,
@@ -34,476 +35,362 @@ class MediaRecorderProviderWithSileroVAD(
     SendVoiceActivityEvent: (Map<String, Any>) -> Unit
 ) : AudioRecorderProvider {
 
-    @Volatile private var waveRecorder: WaveRecorder? = null
-    @Volatile private var recorderState: RecorderState? = null
+    private val appContext = context.applicationContext
     private val sendStatusEvent = SendStatusEvent
     private val sendAmplitudeEvent = SendAmplitudeEvent
     private val sendVoiceActivityEvent = SendVoiceActivityEvent
-    @Volatile private var lastAmplitude: Float = -160.0f
 
-    @Volatile private var webRTCVad: VadSilero? = null
+    @Volatile private var waveRecorder: WaveRecorder? = null
+    @Volatile private var recorderState: RecorderState = RecorderState.STOP
+
+    // observable state (was returning fresh flows each call — now stable)
+    private val _innerState = MutableStateFlow(RecorderInnerState(RecorderState.STOP))
+    private val _progress = MutableStateFlow(RecorderProgress(0))
+    private val _metrics = MutableStateFlow(RecorderMetrics(0))
+
+    // amplitude + cadence
+    @Volatile private var lastAmplitudeDb: Float = -160f
+    @Volatile private var amplitudeUpdateIntervalMs: Long = 1000L / 60L
+    @Volatile private var lastAmplitudeSentAt: Long = 0
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    // VAD
+    @Volatile private var vad: VadSilero? = null
     @Volatile private var vadAudioRecord: AudioRecord? = null
     @Volatile private var vadJob: Job? = null
     @Volatile private var isVADActive = false
-    
     @Volatile private var vadEventMode = "onEveryFrame"
     @Volatile private var vadThrottleMs = 100
-    private var lastEventTime: Long = 0
+    private var lastVADEventAt = 0L
     private var lastVoiceState = false
     @Volatile private var shouldAutoStartVAD = false
-
     private val vadLock = Any()
-    
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private val vadScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    
-    // Configurable amplitude update frequency (default: 60 FPS = 16.67ms)
-    @Volatile private var amplitudeUpdateIntervalMs: Long = 1000L / 60L
-    @Volatile private var lastAmplitudeUpdateTime: Long = 0
-    private val amplitudeHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    
+    // audio constants
     private val sampleRate = 16000
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-    private val frameSize = 512  // 32ms frames at 16kHz (required for Silero VAD)
-    private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 4
-    private val appContext = context
-    
+    private val frameSize = 512 // 32ms @ 16kHz
+    private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 2
+
+    private var tickJob: Job? = null
+    private var startedAtMs: Long = 0
+
     fun setAmplitudeUpdateFrequency(frequencyHz: Double) {
-        val clampedFrequency = maxOf(1.0, minOf(120.0, frequencyHz))
-        amplitudeUpdateIntervalMs = (1000.0 / clampedFrequency).toLong()
+        val f = frequencyHz.coerceIn(1.0, 120.0)
+        amplitudeUpdateIntervalMs = (1000.0 / f).toLong()
     }
-    
+
+    override fun recorderStatus(): StateFlow<RecorderInnerState> = _innerState
+    override fun recorderTimeElapsed(): StateFlow<RecorderProgress> = _progress
+    override fun recorderMetrics(): StateFlow<RecorderMetrics> = _metrics
+
+    override fun isRecording(): Boolean = recorderState == RecorderState.RECORDING
+    override fun isPaused(): Boolean  = recorderState == RecorderState.PAUSE
+
+    override fun getCurrentAmplitude(): Float? = if (isRecording()) lastAmplitudeDb else -160f
+
+    override fun isVoiceActivityDetectionActive(): Boolean = isVADActive
+
+    override fun releaseRecorder() {
+        try {
+            stopVoiceActivityDetection()
+        } catch (_: Exception) {}
+        try {
+            waveRecorder?.stopRecording()
+        } catch (_: Exception) {}
+        waveRecorder = null
+        stopTicks()
+        ioScope.cancel()
+    }
+
     override fun startRecording(context: Context, argument: RecordArgument): Boolean {
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            Log.e(TAG, "Permission to record audio not granted")
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.e(TAG, "Record audio permission not granted")
             return false
         }
 
-        waveRecorder?.let {
-            try {
-                it.stopRecording()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error stopping previous recorder: ${e.message}")
-            }
-        }
+        // clean previous
+        try { waveRecorder?.stopRecording() } catch (_: Exception) {}
         waveRecorder = null
-        recorderState = null
-        lastAmplitude = -160.0f
-        lastAmplitudeUpdateTime = 0
+        recorderState = RecorderState.STOP
+        _innerState.value = RecorderInnerState(RecorderState.STOP)
+        lastAmplitudeDb = -160f
+        lastAmplitudeSentAt = 0
 
         val file = File(argument.outputFile)
         file.parentFile?.mkdirs()
 
-        waveRecorder = WaveRecorder(argument.outputFile).apply {
+        val wr = WaveRecorder(argument.outputFile).apply {
             configureWaveSettings {
-                sampleRate = 16000
-                channels = AudioFormat.CHANNEL_IN_MONO
-                audioEncoding = AudioFormat.ENCODING_PCM_16BIT
+                sampleRate = this@MediaRecorderProviderWithSileroVAD.sampleRate
+                channels = channelConfig
+                audioEncoding = audioFormat
             }
-            
             noiseSuppressorActive = NoiseSuppressor.isAvailable()
             silenceDetection = false
 
             onStateChangeListener = { state ->
                 recorderState = state
-                
-                val status = when(state) {
+                _innerState.value = RecorderInnerState(state)
+                sendStatusEvent(mapOf("status" to when (state) {
                     RecorderState.RECORDING -> "recording"
-                    RecorderState.STOP -> "stopped"
                     RecorderState.PAUSE -> "paused"
+                    RecorderState.STOP -> "stopped"
                     RecorderState.SKIPPING_SILENCE -> "skipping_silence"
-                }
-                
-                sendStatusEvent(mapOf("status" to status))
-                
-                if (state == RecorderState.RECORDING && shouldAutoStartVAD) {
-                    shouldAutoStartVAD = false
-                    vadScope.launch {
-                        try {
-                            startVoiceActivityDetection()
-                        } catch (e: Exception) {
-                            Log.e(TAG, "VAD auto-start failed: ${e.message}")
+                }))
+                when (state) {
+                    RecorderState.RECORDING -> {
+                        startedAtMs = System.currentTimeMillis()
+                        startTicks()
+                        if (shouldAutoStartVAD) {
+                            shouldAutoStartVAD = false
+                            ioScope.launch {
+                                try { startVoiceActivityDetection() } catch (e: Exception) {
+                                    Log.e(TAG, "VAD auto-start failed: ${e.message}")
+                                }
+                            }
                         }
                     }
+                    else -> stopTicks()
                 }
             }
 
-            onAmplitudeListener = { amplitude ->
-                val linearAmp = amplitude.toDouble()
-                val normalizedAmp = linearAmp / 32768.0
-                val db = if (normalizedAmp > 0.0) {
-                    20.0 * log10(normalizedAmp)
-                } else {
-                    -160.0
-                }
-                lastAmplitude = maxOf(-160.0f, db.toFloat())
-                
-                val currentTime = System.currentTimeMillis()
-                if (currentTime - lastAmplitudeUpdateTime >= amplitudeUpdateIntervalMs) {
-                    lastAmplitudeUpdateTime = currentTime
-                    amplitudeHandler.post {
-                        sendAmplitudeEvent(mapOf("amplitude" to lastAmplitude))
+            onAmplitudeListener = { amplitudeShort ->
+                // to dB
+                val normalized = (amplitudeShort.toDouble() / 32768.0).coerceIn(0.0, 1.0)
+                val db = if (normalized > 0.0) 20.0 * log10(normalized) else -160.0
+                lastAmplitudeDb = db.toFloat()
+
+                val now = System.currentTimeMillis()
+                if (now - lastAmplitudeSentAt >= amplitudeUpdateIntervalMs) {
+                    lastAmplitudeSentAt = now
+                    mainHandler.post {
+                        sendAmplitudeEvent(mapOf("amplitude" to lastAmplitudeDb))
                     }
                 }
             }
         }
 
         return try {
-            waveRecorder?.startRecording()
+            wr.startRecording()
+            waveRecorder = wr
             true
         } catch (e: Exception) {
-            Log.e(TAG, "startRecording: $e")
+            Log.e(TAG, "startRecording failed", e)
             waveRecorder = null
             false
         }
     }
 
     override fun stopRecording(): Boolean {
+        shouldAutoStartVAD = false
+        stopVoiceActivityDetection()
+        stopTicks()
         return try {
-            shouldAutoStartVAD = false
-            stopVoiceActivityDetection()
-            
             waveRecorder?.stopRecording()
             waveRecorder = null
-            recorderState = null
-            lastAmplitude = -160.0f
-            lastAmplitudeUpdateTime = 0
+            recorderState = RecorderState.STOP
+            _innerState.value = RecorderInnerState(RecorderState.STOP)
+            lastAmplitudeDb = -160f
             true
         } catch (e: Exception) {
-            Log.e(TAG, "stopRecording: $e")
+            Log.e(TAG, "stopRecording failed", e)
             waveRecorder = null
-            recorderState = null
-            shouldAutoStartVAD = false
-            lastAmplitude = -160.0f
-            lastAmplitudeUpdateTime = 0
+            recorderState = RecorderState.STOP
+            _innerState.value = RecorderInnerState(RecorderState.STOP)
+            lastAmplitudeDb = -160f
             false
         }
     }
 
-    override fun pauseRecording(): Boolean {
-        return try {
-            shouldAutoStartVAD = false
-            waveRecorder?.pauseRecording()
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "pauseRecording: $e")
-            false
-        }
+    override fun pauseRecording(): Boolean = try {
+        waveRecorder?.pauseRecording(); true
+    } catch (e: Exception) {
+        Log.e(TAG, "pauseRecording failed", e); false
     }
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    override fun resumeRecording(): Boolean {
-        return try {
-            waveRecorder?.resumeRecording()
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "resumeRecording: $e")
-            false
-        }
+    override fun resumeRecording(): Boolean = try {
+        waveRecorder?.resumeRecording(); true
+    } catch (e: Exception) {
+        Log.e(TAG, "resumeRecording failed", e); false
     }
 
-    override fun isPaused(): Boolean {
-        return try {
-            recorderState == RecorderState.PAUSE
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking paused state: ${e.message}")
-            false
-        }
-    }
-
-    // MARK: - Silero VAD Implementation
+    // ---------------- VAD ----------------
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     override fun startVoiceActivityDetection(): String {
         if (!isRecording()) {
-            Log.w(TAG, "❌ VAD cannot start - not recording")
-            return "NotRecording: Voice activity detection requires active recording"
+            Log.w(TAG, "VAD requested while not recording")
+            return "NotRecording"
         }
-        
         synchronized(vadLock) {
-            if (isVADActive) {
-                Log.w(TAG, "Silero VAD already active")
-                return "AlreadyActive"
-            }
-
+            if (isVADActive) return "AlreadyActive"
             return try {
-            webRTCVad = VadSilero(
-                context = appContext,
-                sampleRate = SampleRate.SAMPLE_RATE_16K,
-                frameSize = FrameSize.FRAME_SIZE_512,
-                mode = Mode.NORMAL,
-                silenceDurationMs = 300,
-                speechDurationMs = 50
-            )
+                vad = VadSilero(
+                    context = appContext,
+                    sampleRate = SampleRate.SAMPLE_RATE_16K,
+                    frameSize = FrameSize.FRAME_SIZE_512,
+                    mode = Mode.NORMAL,
+                    silenceDurationMs = 300,
+                    speechDurationMs = 50
+                )
 
-            vadAudioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRate,
-                channelConfig,
-                audioFormat,
-                bufferSize
-            )
+                // Use VOICE_RECOGNITION to (slightly) reduce contentions with MediaRecorder
+                vadAudioRecord = AudioRecord(
+                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    sampleRate,
+                    channelConfig,
+                    audioFormat,
+                    bufferSize
+                )
 
-            if (vadAudioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                Log.e(TAG, "❌ Failed to initialize AudioRecord for Silero VAD")
-                cleanup()
-                return "AudioRecordInitFailed"
-            }
+                if (vadAudioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                    Log.e(TAG, "AudioRecord init failed for VAD")
+                    cleanupVAD()
+                    return "AudioRecordInitFailed"
+                }
 
-            vadAudioRecord?.startRecording()
-            isVADActive = true
-
-            vadJob = vadScope.launch {
-                processVADAudioStream()
-            }
-
-                Log.d(TAG, "✅ Silero VAD started successfully")
+                vadAudioRecord!!.startRecording()
+                isVADActive = true
+                vadJob = ioScope.launch { processVAD() }
                 "Success"
-                
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Failed to start Silero VAD: ${e.message}")
-                cleanup()
+                Log.e(TAG, "startVoiceActivityDetection error", e)
+                cleanupVAD()
                 "Error: ${e.message}"
             }
-        } // End synchronized block
-    }
-
-    private suspend fun processVADAudioStream() {
-        val buffer = ShortArray(frameSize)
-        var consecutiveErrors = 0
-        val maxConsecutiveErrors = 5
-
-
-        while (isVADActive && vadAudioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-            try {
-                val samplesRead = vadAudioRecord?.read(buffer, 0, frameSize) ?: 0
-
-                if (samplesRead == frameSize) {
-                    consecutiveErrors = 0
-                    
-                    val amplitude = calculateAmplitudeFromBuffer(buffer)
-                    lastAmplitude = amplitude
-                    
-                    webRTCVad?.let { vad ->
-                        val isVoice = vad.isSpeech(buffer)
-                        val currentTime = System.currentTimeMillis()
-                        val isStateChange = isVoice != lastVoiceState
-                        
-                        val shouldSendEvent = when (vadEventMode) {
-                            "onChange" -> isStateChange
-                            "throttled" -> isStateChange || (currentTime - lastEventTime) >= vadThrottleMs
-                            else -> true
-                        }
-
-                        if (shouldSendEvent) {
-                            val eventType = if (isStateChange) {
-                                if (isVoice) "speech_start" else "silence_start"
-                            } else {
-                                if (isVoice) "speech_continue" else "silence_continue"
-                            }
-                            
-                            withContext(Dispatchers.Main) {
-                                val result = mapOf(
-                                    "isVoiceDetected" to isVoice,
-                                    "timestamp" to currentTime,
-                                    "confidence" to if (isVoice) 0.85 else 0.15,
-                                    "isStateChange" to isStateChange,
-                                    "previousState" to lastVoiceState,
-                                    "eventType" to eventType
-                                )
-                                sendVoiceActivityEvent(result)
-                            }
-                            
-                            if (isStateChange) {
-                                lastVoiceState = isVoice
-                            }
-                            
-                            lastEventTime = currentTime
-                        }
-                    }
-                } else if (samplesRead < 0) {
-                    consecutiveErrors++
-                    Log.w(TAG, "AudioRecord read error: $samplesRead (consecutive: $consecutiveErrors)")
-                    
-                    if (consecutiveErrors >= maxConsecutiveErrors) {
-                        Log.e(TAG, "Too many consecutive read errors, stopping VAD")
-                        break
-                    }
-                } else {
-                    Log.w(TAG, "Incomplete frame read: $samplesRead/$frameSize samples")
-                }
-
-                // Optimal delay for 32ms frames
-                delay(32)
-
-            } catch (e: Exception) {
-                consecutiveErrors++
-                Log.e(TAG, "Error in VAD processing: ${e.message} (consecutive: $consecutiveErrors)")
-                
-                if (consecutiveErrors >= maxConsecutiveErrors) {
-                    Log.e(TAG, "Too many consecutive errors, stopping VAD")
-                    break
-                }
-                
-                delay(50) // Longer delay on error
-            }
         }
-
-        Log.d(TAG, "Silero VAD audio processing stopped")
     }
 
     override fun stopVoiceActivityDetection(): String {
-        // THREAD SAFETY FIX: Synchronize VAD state changes
         synchronized(vadLock) {
-            if (!isVADActive) {
-                return "NotActive"
-            }
-
+            if (!isVADActive) return "NotActive"
             return try {
                 isVADActive = false
-                
-                vadJob?.cancel()
-                vadJob = null
-
-                // Stop and release AudioRecord
-                vadAudioRecord?.stop()
-                vadAudioRecord?.release()
+                vadJob?.cancel(); vadJob = null
+                vadAudioRecord?.let {
+                    try { it.stop() } catch (_: Exception) {}
+                    try { it.release() } catch (_: Exception) {}
+                }
                 vadAudioRecord = null
-
-                // Close Silero VAD properly
-                webRTCVad?.close()
-                webRTCVad = null
-
-                Log.d(TAG, "Silero VAD stopped successfully")
+                try { vad?.close() } catch (_: Exception) {}
+                vad = null
                 "Success"
-
             } catch (e: Exception) {
-                Log.e(TAG, "Error stopping Silero VAD: ${e.message}")
-                cleanup()
+                Log.e(TAG, "stopVoiceActivityDetection error", e)
+                cleanupVAD()
                 "Error: ${e.message}"
             }
-        } // End synchronized block
+        }
     }
 
-    private fun cleanup() {
-        isVADActive = false
-        vadJob?.cancel()
-        vadJob = null
-        
-        try {
-            vadAudioRecord?.stop()
-        } catch (e: Exception) {
-            Log.w(TAG, "Error stopping AudioRecord: ${e.message}")
+    private suspend fun processVAD() {
+        val buf = ShortArray(frameSize)
+        var consecutiveErrors = 0
+        val maxErrors = 5
+
+        while (isVADActive && vadAudioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+            try {
+                val read = vadAudioRecord?.read(buf, 0, frameSize) ?: 0
+                if (read == frameSize) {
+                    consecutiveErrors = 0
+
+                    val isVoice = vad?.isSpeech(buf) ?: false
+                    val now = System.currentTimeMillis()
+                    val isChange = isVoice != lastVoiceState
+
+                    val shouldEmit = when (vadEventMode) {
+                        "onChange" -> isChange
+                        "throttled" -> isChange || (now - lastVADEventAt) >= vadThrottleMs
+                        else -> true
+                    }
+                    if (shouldEmit) {
+                        val eventType = if (isChange) {
+                            if (isVoice) "speech_start" else "silence_start"
+                        } else {
+                            if (isVoice) "speech_continue" else "silence_continue"
+                        }
+                        withContext(Dispatchers.Main) {
+                            sendVoiceActivityEvent(
+                                mapOf(
+                                    "isVoiceDetected" to isVoice,
+                                    "timestamp" to now,
+                                    "confidence" to if (isVoice) 0.85 else 0.15,
+                                    "isStateChange" to isChange,
+                                    "previousState" to lastVoiceState,
+                                    "eventType" to eventType
+                                )
+                            )
+                        }
+                        if (isChange) lastVoiceState = isVoice
+                        lastVADEventAt = now
+                    }
+                } else if (read < 0) {
+                    if (++consecutiveErrors >= maxErrors) break
+                }
+                delay(32) // ~frame time
+            } catch (e: CancellationException) {
+                break
+            } catch (e: Exception) {
+                if (++consecutiveErrors >= maxErrors) break
+                delay(50)
+            }
         }
-        
-        vadAudioRecord?.release()
-        vadAudioRecord = null
-        
-        try {
-            webRTCVad?.close()
-        } catch (e: Exception) {
-            Log.w(TAG, "Error closing Silero VAD: ${e.message}")
-        }
-        webRTCVad = null
+        Log.d(TAG, "VAD loop end")
     }
-    
-    fun destroy() {
-        cleanup()
-        vadScope.cancel()
+
+    private fun cleanupVAD() {
+        isVADActive = false
+        try { vadJob?.cancel() } catch (_: Exception) {}
+        vadJob = null
+        try { vadAudioRecord?.stop() } catch (_: Exception) {}
+        try { vadAudioRecord?.release() } catch (_: Exception) {}
+        vadAudioRecord = null
+        try { vad?.close() } catch (_: Exception) {}
+        vad = null
     }
 
     override fun setVoiceActivityThreshold(threshold: Float): String {
-        // Silero VAD uses predefined modes (NORMAL, AGGRESSIVE)
-        // rather than configurable thresholds. This method is provided for API compatibility.
-        return if (threshold >= 0.0f && threshold <= 1.0f) {
-            "NotSupported: Silero VAD uses predefined sensitivity modes. Current mode: NORMAL"
-        } else {
-            "InvalidThreshold: Threshold must be between 0.0 and 1.0"
-        }
+        // left for API compatibility; Silero uses modes
+        return if (threshold in 0f..1f) {
+            "NotSupported: Silero uses modes (NORMAL/AGGRESSIVE)"
+        } else "InvalidThreshold"
     }
-    
+
     fun setVADEventMode(mode: String, throttleMs: Int = 100): String {
-        return try {
-            when (mode) {
-                "onChange", "onEveryFrame", "throttled" -> {
-                    vadEventMode = mode
-                    if (mode == "throttled") {
-                        vadThrottleMs = throttleMs
-                    }
-                    "VAD event mode set to: $mode" + if (mode == "throttled") " with ${throttleMs}ms throttle" else ""
-                }
-                else -> "Invalid mode: $mode. Valid modes are: onChange, onEveryFrame, throttled"
+        return when (mode) {
+            "onChange", "onEveryFrame", "throttled" -> {
+                vadEventMode = mode
+                if (mode == "throttled") vadThrottleMs = throttleMs
+                "VAD event mode set to $mode${if (mode == "throttled") " (${throttleMs}ms)" else ""}"
             }
-        } catch (e: Exception) {
-            "Error: ${e.message}"
-        }
-    }
-    
-    fun requestAutoStartVAD() {
-        shouldAutoStartVAD = true
-    }
-
-    override fun isVoiceActivityDetectionActive(): Boolean = isVADActive
-
-    override fun isRecording(): Boolean {
-        return waveRecorder != null && try {
-            recorderState == RecorderState.RECORDING
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking recording state: ${e.message}")
-            false
+            else -> "Invalid mode"
         }
     }
 
-    override fun getCurrentAmplitude(): Float? {
-        return if (isRecording()) lastAmplitude else -160.0f
-    }
+    fun requestAutoStartVAD() { shouldAutoStartVAD = true }
 
-    override fun recorderStatus(): StateFlow<RecorderInnerState> {
-        return MutableStateFlow(RecorderInnerState(recorderState ?: RecorderState.STOP))
-    }
-
-    override fun recorderTimeElapsed(): StateFlow<RecorderProgress> {
-        return MutableStateFlow(RecorderProgress(0))
-    }
-
-    override fun recorderMetrics(): StateFlow<RecorderMetrics> {
-        return MutableStateFlow(RecorderMetrics(0))
-    }
-
-    override fun releaseRecorder() {
-        stopVoiceActivityDetection()
-        
-
-        waveRecorder?.stopRecording()
-        waveRecorder = null
-        
-        vadScope.cancel()
-    }
-    
-    /**
-     * Calculate amplitude in decibels (dB) from audio buffer
-     * @param buffer ShortArray containing PCM audio samples
-     * @return Amplitude in dB (range: -160.0 to 0.0)
-     */
-    private fun calculateAmplitudeFromBuffer(buffer: ShortArray): Float {
-        if (buffer.isEmpty()) return -160.0f
-        
-        // Calculate RMS (Root Mean Square) of the audio samples
-        var sum = 0.0
-        for (sample in buffer) {
-            val normalized = sample.toDouble() / Short.MAX_VALUE
-            sum += normalized * normalized
+    // ----- simple elapsed ticker so JS can render timers accurately
+    private fun startTicks() {
+        stopTicks()
+        tickJob = ioScope.launch {
+            while (recorderState == RecorderState.RECORDING) {
+                val elapsed = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(0)
+                _progress.value = RecorderProgress((elapsed / 1000))
+                _metrics.value = RecorderMetrics(0) // keep placeholder metric stable
+                delay(200)
+            }
         }
-        val rms = sqrt(sum / buffer.size)
-        
-     
-        return if (rms > 0.0) {
-            val db = 20.0 * log10(rms)
-            maxOf(-160.0f, db.toFloat()) // Clamp to -160 dB minimum
-        } else {
-            -160.0f // Silence
-        }
+    }
+
+    private fun stopTicks() {
+        tickJob?.cancel()
+        tickJob = null
     }
 
     companion object {

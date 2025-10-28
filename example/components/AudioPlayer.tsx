@@ -6,6 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   Alert,
+  Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import ExpoAudioStudio from 'expo-audio-studio';
@@ -30,7 +31,6 @@ export default function AudioPlayer() {
   const [isPaused, setIsPaused] = useState(false);
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const [currentDuration, setCurrentDuration] = useState(0);
-
   useEffect(() => {
     loadRecordings();
   }, []);
@@ -121,6 +121,7 @@ export default function AudioPlayer() {
     try {
       if (!isPlaying && !isPaused) {
         // Start playback
+        if(Platform.OS === 'ios') {
         await ExpoAudioStudio.configureAudioSession({
           category: 'playback',
           mode: 'default',
@@ -130,8 +131,10 @@ export default function AudioPlayer() {
             allowBluetoothA2DP: true,
           },
         });
+        
         await ExpoAudioStudio.activateAudioSession();
         
+      }
         ExpoAudioStudio.startPlaying(selectedRecording.path);
         setIsPlaying(true);
       } else if (isPlaying) {
@@ -170,7 +173,8 @@ export default function AudioPlayer() {
     }
 
     try {
-      ExpoAudioStudio.seekTo(value);
+      
+      console.log(ExpoAudioStudio.seekTo(value));
       setPlaybackPosition(value);
     } catch (error) {
       console.error('Seek error:', error);

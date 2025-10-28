@@ -207,7 +207,8 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
     override fun seekTo(position: Int): Boolean {
         return try {
             _player?.let {
-                it.seekTo(position)
+                // Android seekTo is in milliseconds
+                it.seekTo(position * 1000)
                 return true
             }
             false
@@ -293,20 +294,30 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
 
     private fun stopAndReleasePlayer() {
         _player?.run {
-            stop()
-            reset()
-            release()
+            try { if (isPlaying) stop() } catch (_: Exception) {}
+            try { reset() } catch (_: Exception) {}
+            try { release() } catch (_: Exception) {}
         }
         _player = null
-        currentFileName = null  // Clear tracked filename
+        currentFileName = null
         cachedDuration = 0
+        isPaused = false
     }
+
 
     override fun setPlaybackSpeed(speed: String): Boolean {
         return try {
             playbackSpeed = speed.toFloat()
+            _player?.let { p ->
+                try {
+                    val pp = p.playbackParams
+                    p.playbackParams = pp.setSpeed(playbackSpeed)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to set speed on live player: ${e.message}")
+                }
+            }
             true
-        } catch (e: NumberFormatException) {
+        } catch (_: NumberFormatException) {
             false
         }
     }

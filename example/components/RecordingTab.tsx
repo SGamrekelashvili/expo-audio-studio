@@ -7,6 +7,7 @@ import {
   Alert,
   ScrollView,
   Switch,
+  Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import ExpoAudioStudio from 'expo-audio-studio';
@@ -41,7 +42,7 @@ export default function RecordingTab() {
   }, []);
 
   useEffect(() => {
-    const statusSub = ExpoAudioStudio.addRecorderStatusListener((event: AudioRecordingStateChangeEvent) => {
+    const statusSub = ExpoAudioStudio.addListener('onRecorderStatusChange', (event: AudioRecordingStateChangeEvent) => {
       setIsRecording(event.status === 'recording');
       
       if (event.status === 'error') {
@@ -50,11 +51,11 @@ export default function RecordingTab() {
       }
     });
 
-    const amplitudeSub = ExpoAudioStudio.addRecorderAmplitudeListener((event: AudioMeteringEvent) => {
+    const amplitudeSub = ExpoAudioStudio.addListener('onRecorderAmplitude', (event: AudioMeteringEvent) => {
       setAmplitude(event.amplitude);
     });
 
-    const vadSub = ExpoAudioStudio.addVoiceActivityListener((event: VoiceActivityEvent) => {
+    const vadSub = ExpoAudioStudio.addListener('onVoiceActivityDetected', (event: VoiceActivityEvent) => {
       setVoiceDetected(event.isVoiceDetected);
       setVoiceConfidence(event.confidence || 0);
     });
@@ -82,16 +83,18 @@ export default function RecordingTab() {
     }
 
     try {
-      await ExpoAudioStudio.configureAudioSession({
-        category: 'playAndRecord',
-        mode: 'default',
-        options: {
-          defaultToSpeaker: true,
+      if(Platform.OS === 'ios') {
+        await ExpoAudioStudio.configureAudioSession({
+          category: 'playAndRecord',
+          mode: 'default',
+          options: {
+            defaultToSpeaker: true,
           allowBluetooth: true,
           allowBluetoothA2DP: true,
         },
       });
-      await ExpoAudioStudio.activateAudioSession();
+        await ExpoAudioStudio.activateAudioSession();
+      }
 
       const path = ExpoAudioStudio.startRecording();
       setRecordingPath(path);
