@@ -206,6 +206,14 @@ class ExpoAudioStudioModule : Module() {
             return@Function "SeekException: Failed to seek"
         }
 
+        Function("setPlaybackSpeed") { speed: String ->
+            val success = getAudioPlayerProvider().setPlaybackSpeed(speed)
+            if (success) {
+                return@Function "success"
+            }
+            return@Function "PlaybackFailedException: Failed to set playback speed"
+        }
+
         // recorder
         Function("setAmplitudeUpdateFrequency") { hz: Double ->
             try {
