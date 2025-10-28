@@ -104,9 +104,12 @@ if (!permission.granted) {
 }
 
 // Listen to recording events
-const subscription = ExpoAudioStudio.addRecorderStatusListener(event => {
-  console.log('Recording status:', event.status);
-});
+const subscription = ExpoAudioStudio.addListener(
+  'onRecorderStatusChange',
+  (event: AudioRecordingStateChangeEvent) => {
+    console.log('Recording status:', event.status);
+  }
+);
 
 // Start recording
 const filePath = ExpoAudioStudio.startRecording();
@@ -134,14 +137,19 @@ ExpoAudioStudio.setVADEventMode('onEveryFrame'); // Real-time (default)
 ExpoAudioStudio.setVADEnabled(true);
 
 // Listen to voice activity
-const vadSubscription = ExpoAudioStudio.addVoiceActivityListener(event => {
-  if (event.isStateChange) {
-    // State just changed - someone started or stopped talking
-    console.log(event.isVoiceDetected ? 'Started talking!' : 'Stopped talking');
+const vadSubscription = ExpoAudioStudio.addListener(
+  'onVoiceActivityDetected',
+  (event: VoiceActivityEvent) => {
+    if (event.isStateChange) {
+      // State just changed - someone started or stopped talking
+      console.log(
+        event.isVoiceDetected ? 'Started talking!' : 'Stopped talking'
+      );
+    }
+    console.log('Confidence:', event.confidence);
+    console.log('Event type:', event.eventType);
   }
-  console.log('Confidence:', event.confidence);
-  console.log('Event type:', event.eventType);
-});
+);
 
 // Start recording - VAD will automatically start
 ExpoAudioStudio.startRecording();
@@ -153,15 +161,18 @@ ExpoAudioStudio.startRecording();
 import ExpoAudioStudio from 'expo-audio-studio';
 
 // Listen to playback events
-const playerSubscription = ExpoAudioStudio.addPlayerStatusListener(event => {
-  console.log('Playing:', event.isPlaying);
-});
+const playerSubscription = ExpoAudioStudio.addListener(
+  'onPlayerStatusChange',
+  (event: PlayerStatusChangeEvent) => {
+    console.log('Playing:', event.isPlaying);
+  }
+);
 
 // Start playback
 ExpoAudioStudio.startPlaying('/path/to/audio/file.wav');
 
 // Control playback speed
-ExpoAudioStudio.setPlaybackSpeed(1.5); // 1.5x speed
+ExpoAudioStudio.setPlaybackSpeed('1.5'); // 1.5x speed
 
 // Cleanup
 playerSubscription.remove();
@@ -228,35 +239,53 @@ playerSubscription.remove();
 #### Recording Events
 
 ```typescript
-addRecorderStatusListener((event: AudioRecordingStateChangeEvent) => {
-  // event.status: 'recording' | 'stopped' | 'paused' | 'resumed' | 'error'
-});
+import ExpoAudioStudio from 'expo-audio-studio';
 
-addRecorderAmplitudeListener((event: AudioMeteringEvent) => {
-  // event.amplitude: number (dB level)
-});
+ExpoAudioStudio.addListener(
+  'onRecorderStatusChange',
+  (event: AudioRecordingStateChangeEvent) => {
+    // event.status: 'recording' | 'stopped' | 'paused' | 'resumed' | 'error'
+  }
+);
+const subscription = ExpoAudioStudio.addListener(
+  'onRecorderAmplitude',
+  (event: AudioMeteringEvent) => {
+    // event.amplitude: number (dB level)
+  }
+);
 ```
 
 #### Voice Activity Events
 
 ```typescript
-addVoiceActivityListener((event: VoiceActivityEvent) => {
-  // event.isVoiceDetected: boolean - Is someone speaking?
-  // event.confidence: number - How confident is the detection (0.0-1.0)
-  // event.timestamp: number - When this happened
-  // event.isStateChange: boolean - Did the state just change?
-  // event.previousState: boolean - What was the previous state
-  // event.eventType: 'speech_start' | 'speech_continue' | 'silence_start' | 'silence_continue'
-});
+import ExpoAudioStudio from 'expo-audio-studio';
+
+const subscription = ExpoAudioStudio.addListener(
+  'onVoiceActivityDetected',
+  (event: VoiceActivityEvent) => {
+    // event.isVoiceDetected: boolean - Is someone speaking?
+    // event.confidence: number - How confident is the detection (0.0-1.0)
+    // event.timestamp: number - When this happened
+    // event.isStateChange: boolean - Did the state just change?
+    // event.previousState: boolean - What was the previous state
+    // event.eventType: 'speech_start' | 'speech_continue' | 'silence_start' | 'silence_continue'
+  }
+);
 ```
 
 #### Playback Events
 
 ```typescript
-addPlayerStatusListener((event: PlayerStatusChangeEvent) => {
-  // event.isPlaying: boolean
-  // event.didJustFinish: boolean
-});
+import ExpoAudioStudio from 'expo-audio-studio';
+
+// Listen to player status changes
+const subscription = ExpoAudioStudio.addListener(
+  'onPlayerStatusChange',
+  (event: PlayerStatusChangeEvent) => {
+    // event.isPlaying: boolean
+    // event.didJustFinish: boolean
+  }
+);
 ```
 
 ## More examples
@@ -310,13 +339,16 @@ import ExpoAudioStudio from 'expo-audio-studio';
 ExpoAudioStudio.setVADEventMode('onChange');
 ExpoAudioStudio.setVADEnabled(true);
 
-const subscription = ExpoAudioStudio.addVoiceActivityListener(event => {
-  if (event.eventType === 'speech_start') {
-    console.log('🎤 Voice detected');
-  } else if (event.eventType === 'silence_start') {
-    console.log('🔇 Silence detected');
+const subscription = ExpoAudioStudio.addListener(
+  'onVoiceActivityDetected',
+  (event: VoiceActivityEvent) => {
+    if (event.eventType === 'speech_start') {
+      console.log('🎤 Voice detected');
+    } else if (event.eventType === 'silence_start') {
+      console.log('🔇 Silence detected');
+    }
   }
-});
+);
 ```
 
 #### Example 2
@@ -328,13 +360,16 @@ import ExpoAudioStudio from 'expo-audio-studio';
 ExpoAudioStudio.setVADEventMode('throttled', 250);
 ExpoAudioStudio.setVADEnabled(true);
 
-const subscription = ExpoAudioStudio.addVoiceActivityListener(event => {
-  if (event.isVoiceDetected) {
-    console.log('Voice detected');
-  } else {
-    console.log('Silence detected');
+const subscription = ExpoAudioStudio.addListener(
+  'onVoiceActivityDetected',
+  (event: VoiceActivityEvent) => {
+    if (event.isVoiceDetected) {
+      console.log('Voice detected');
+    } else {
+      console.log('Silence detected');
+    }
   }
-});
+);
 ```
 
 ### Get waveform data
