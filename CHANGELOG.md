@@ -1,3 +1,10 @@
+## [1.2.6](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.5...v1.2.6) (2025-10-28)
+
+
+### Bug Fixes
+
+* **android:** added missing setPlaybackSpeed api ([6a26eb9](https://github.com/SGamrekelashvili/expo-audio-studio/commit/6a26eb9e34644e3db0acbf539a7029ded90e0424))
+
 ## [1.2.5](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.4...v1.2.5) (2025-10-28)
 
 
