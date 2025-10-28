@@ -1,3 +1,10 @@
+## [1.2.5](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.4...v1.2.5) (2025-10-28)
+
+
+### Bug Fixes
+
+* **android:** api and better class handling ([1cd132d](https://github.com/SGamrekelashvili/expo-audio-studio/commit/1cd132d4ef151295233c14f4ddda0014ff747b97))
+
 ## [1.2.4](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.3...v1.2.4) (2025-10-28)
 
 
