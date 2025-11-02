@@ -23,32 +23,24 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
 import kotlin.math.log10
-import kotlin.math.sqrt
 
-/**
- * MediaRecorder + Silero VAD; 16kHz mono PCM, same public API.
- */
-class MediaRecorderProviderWithSileroVAD(
+class MediaRecorderProvider(
     context: Context,
-    SendStatusEvent: (Map<String, Any>) -> Unit,
-    SendAmplitudeEvent: (Map<String, Any>) -> Unit,
-    SendVoiceActivityEvent: (Map<String, Any>) -> Unit
+    private val sendStatusEvent: (Map<String, Any>) -> Unit,
+    private val sendAmplitudeEvent: (Map<String, Any>) -> Unit,
+    private val sendVoiceActivityEvent: (Map<String, Any>) -> Unit,
+    private val  sendChunkEvent: (Map<String, Any>) -> Unit
 ) : AudioRecorderProvider {
 
     private val appContext = context.applicationContext
-    private val sendStatusEvent = SendStatusEvent
-    private val sendAmplitudeEvent = SendAmplitudeEvent
-    private val sendVoiceActivityEvent = SendVoiceActivityEvent
 
     @Volatile private var waveRecorder: WaveRecorder? = null
     @Volatile private var recorderState: RecorderState = RecorderState.STOP
 
-    // observable state (was returning fresh flows each call — now stable)
     private val _innerState = MutableStateFlow(RecorderInnerState(RecorderState.STOP))
     private val _progress = MutableStateFlow(RecorderProgress(0))
     private val _metrics = MutableStateFlow(RecorderMetrics(0))
 
-    // amplitude + cadence
     @Volatile private var lastAmplitudeDb: Float = -160f
     @Volatile private var amplitudeUpdateIntervalMs: Long = 1000L / 60L
     @Volatile private var lastAmplitudeSentAt: Long = 0
@@ -61,23 +53,24 @@ class MediaRecorderProviderWithSileroVAD(
     @Volatile private var isVADActive = false
     @Volatile private var vadEventMode = "onEveryFrame"
     @Volatile private var vadThrottleMs = 100
+    private var vadMode = Mode.NORMAL
     private var lastVADEventAt = 0L
     private var lastVoiceState = false
     @Volatile private var shouldAutoStartVAD = false
     private val vadLock = Any()
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    // audio constants
-    private val sampleRate = 16000
+    private val sampleRateConfig = 16000
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
     private val frameSize = 512 // 32ms @ 16kHz
-    private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 2
+    private val bufferSize = AudioRecord.getMinBufferSize(sampleRateConfig, channelConfig, audioFormat) * 2
 
     private var tickJob: Job? = null
     private var startedAtMs: Long = 0
+    private var enableListenToChunks:Boolean = false
 
-    fun setAmplitudeUpdateFrequency(frequencyHz: Double) {
+    override fun setAmplitudeUpdateFrequency(frequencyHz: Double) {
         val f = frequencyHz.coerceIn(1.0, 120.0)
         amplitudeUpdateIntervalMs = (1000.0 / f).toLong()
     }
@@ -113,7 +106,6 @@ class MediaRecorderProviderWithSileroVAD(
             return false
         }
 
-        // clean previous
         try { waveRecorder?.stopRecording() } catch (_: Exception) {}
         waveRecorder = null
         recorderState = RecorderState.STOP
@@ -126,12 +118,23 @@ class MediaRecorderProviderWithSileroVAD(
 
         val wr = WaveRecorder(argument.outputFile).apply {
             configureWaveSettings {
-                sampleRate = this@MediaRecorderProviderWithSileroVAD.sampleRate
+                sampleRate = sampleRateConfig
                 channels = channelConfig
                 audioEncoding = audioFormat
             }
             noiseSuppressorActive = NoiseSuppressor.isAvailable()
             silenceDetection = false
+
+            if(enableListenToChunks){
+                onAudioChunkCaptured = {state ->
+                    val toBase64 = if  (android.os.Build.VERSION.SDK_INT >= 26) {
+                          java.util.Base64.getEncoder().encodeToString(state)
+                        } else {
+                           android.util.Base64.encodeToString(state, android.util.Base64.NO_WRAP)
+                        }
+                    sendChunkEvent(mapOf("base64" to toBase64))
+                }
+            }
 
             onStateChangeListener = { state ->
                 recorderState = state
@@ -160,7 +163,6 @@ class MediaRecorderProviderWithSileroVAD(
             }
 
             onAmplitudeListener = { amplitudeShort ->
-                // to dB
                 val normalized = (amplitudeShort.toDouble() / 32768.0).coerceIn(0.0, 1.0)
                 val db = if (normalized > 0.0) 20.0 * log10(normalized) else -160.0
                 lastAmplitudeDb = db.toFloat()
@@ -220,7 +222,6 @@ class MediaRecorderProviderWithSileroVAD(
         Log.e(TAG, "resumeRecording failed", e); false
     }
 
-    // ---------------- VAD ----------------
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     override fun startVoiceActivityDetection(): String {
@@ -235,15 +236,14 @@ class MediaRecorderProviderWithSileroVAD(
                     context = appContext,
                     sampleRate = SampleRate.SAMPLE_RATE_16K,
                     frameSize = FrameSize.FRAME_SIZE_512,
-                    mode = Mode.NORMAL,
+                    mode = vadMode,
                     silenceDurationMs = 300,
                     speechDurationMs = 50
                 )
 
-                // Use VOICE_RECOGNITION to (slightly) reduce contentions with MediaRecorder
                 vadAudioRecord = AudioRecord(
-                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                    sampleRate,
+                    MediaRecorder.AudioSource.MIC,
+                    sampleRateConfig,
                     channelConfig,
                     audioFormat,
                     bufferSize
@@ -356,13 +356,19 @@ class MediaRecorderProviderWithSileroVAD(
     }
 
     override fun setVoiceActivityThreshold(threshold: Float): String {
-        // left for API compatibility; Silero uses modes
-        return if (threshold in 0f..1f) {
-            "NotSupported: Silero uses modes (NORMAL/AGGRESSIVE)"
-        } else "InvalidThreshold"
+            if(threshold <= 0.5f){
+                vadMode = Mode.NORMAL
+                return "Normal Used on $threshold"
+            }else if (threshold <= 0.75f){
+                vadMode = Mode.AGGRESSIVE
+                return "Aggressive Used on $threshold"
+            }else{
+                vadMode = Mode.VERY_AGGRESSIVE
+                return "Very Aggressive Used on $threshold"
+            }
     }
 
-    fun setVADEventMode(mode: String, throttleMs: Int = 100): String {
+   override fun setVADEventMode(mode: String, throttleMs: Int): String {
         return when (mode) {
             "onChange", "onEveryFrame", "throttled" -> {
                 vadEventMode = mode
@@ -373,16 +379,20 @@ class MediaRecorderProviderWithSileroVAD(
         }
     }
 
-    fun requestAutoStartVAD() { shouldAutoStartVAD = true }
+    override fun setListenToChunks(enable:Boolean): Boolean{
+        this.enableListenToChunks = enable
+        return enable
+    };
 
-    // ----- simple elapsed ticker so JS can render timers accurately
+    override fun requestAutoStartVAD() { shouldAutoStartVAD = true }
+
     private fun startTicks() {
         stopTicks()
         tickJob = ioScope.launch {
             while (recorderState == RecorderState.RECORDING) {
                 val elapsed = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(0)
                 _progress.value = RecorderProgress((elapsed / 1000))
-                _metrics.value = RecorderMetrics(0) // keep placeholder metric stable
+                _metrics.value = RecorderMetrics(0)
                 delay(200)
             }
         }
@@ -394,6 +404,6 @@ class MediaRecorderProviderWithSileroVAD(
     }
 
     companion object {
-        private const val TAG = "MediaRecorderSileroVAD"
+        private const val TAG = "MediaRecorderProvider"
     }
 }

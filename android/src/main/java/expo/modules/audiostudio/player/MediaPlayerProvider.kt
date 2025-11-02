@@ -1,320 +1,289 @@
 package expo.modules.audiostudio.player
 
-import android.media.AudioAttributes
-import android.media.AudioManager
-import android.media.MediaPlayer
-import android.media.PlaybackParams
-import android.util.Log
 import android.content.Context
+import android.net.Uri
+import android.util.Log
+import androidx.core.net.toUri
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import java.io.File
-
 
 class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
 
     private var playbackSpeed = 1f
-    private var _player: MediaPlayer? = null
-    private var cachedDuration: Int = 0
+    private var _player: ExoPlayer? = null
+    private var cachedDuration: Long = 0L
     private var isPaused: Boolean = false
     private var hasCompleted: Boolean = false
+    private var currentFileName: String? = null
+    private var completionDispatched = false
+    private var sharedListener: Player.Listener? = null
 
+    private fun buildPlayer(): ExoPlayer {
+        val player = ExoPlayer.Builder(context)
+            .setHandleAudioBecomingNoisy(true)
+            .build()
+
+        val attrs = AudioAttributes.Builder()
+            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            .setUsage(C.USAGE_MEDIA)
+            .build()
+
+        player.setAudioAttributes(attrs, /* handleAudioFocus = */ true)
+        player.repeatMode = Player.REPEAT_MODE_OFF
+        player.volume = 1f
+
+        sharedListener?.let { player.removeListener(it) }
+        sharedListener = object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                when (state) {
+                    Player.STATE_READY -> {
+                        cachedDuration = player.duration.coerceAtLeast(0L)
+                    }
+                    Player.STATE_ENDED -> {
+                        hasCompleted = true
+                        isPaused = false
+                    }
+                    else -> Unit
+                }
+            }
+            override fun onPlayerError(error: PlaybackException) {
+                Log.e(TAG, "Player error: ${error.errorCodeName} - ${error.message}")
+                isPaused = false
+                hasCompleted = false
+                completionDispatched = false
+            }
+        }
+        player.addListener(sharedListener!!)
+
+        if (playbackSpeed != 1f) {
+            try {
+                player.playbackParameters = PlaybackParameters(playbackSpeed)
+            } catch (e: Exception) {
+                Log.w(TAG, "Unable to apply playback speed on build: ${e.message}")
+            }
+        }
+
+        return player
+    }
+
+    private fun toMediaItem(fileName: String): MediaItem {
+        return when {
+            fileName.startsWith("asset://") -> {
+                val name = fileName.removePrefix("asset://").trimStart('/')
+                MediaItem.fromUri("asset:///$name".toUri())
+            }
+            !fileName.contains("/") && !fileName.contains("\\") -> {
+                MediaItem.fromUri("asset:///$fileName".toUri())
+            }
+            fileName.startsWith("file://") -> {
+                val path = fileName.removePrefix("file://")
+                val f = File(path)
+                if (!f.exists()) throw java.io.FileNotFoundException("File not found: $path")
+                MediaItem.fromUri(Uri.fromFile(f))
+            }
+            else -> MediaItem.fromUri(fileName.toUri())
+        }
+    }
 
     override fun preparePlayer(
         fileName: String,
         AudioEndFunction: (result: Map<String, Boolean>) -> Unit
     ): Boolean {
         stopAndReleasePlayer()
-        val playbackParams = PlaybackParams()
-        playbackParams.setSpeed(playbackSpeed)
-        playbackParams.setAudioFallbackMode(
-            PlaybackParams.AUDIO_FALLBACK_MODE_DEFAULT
-        )
         hasCompleted = false
+        completionDispatched = false
+        isPaused = false
 
         return try {
-            _player = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setLegacyStreamType(AudioManager.STREAM_MUSIC)
-                        .build()
-                )
+            val player = buildPlayer().also { _player = it }
+            val item = toMediaItem(fileName)
+            player.setMediaItem(item)
+            player.prepare()
+            currentFileName = fileName
 
-
-                // Handle different URI schemes (same logic as startPlaying)
-                Log.d(TAG, "Preparing audio from: $fileName")
-                try {
-                    when {
-                        // Handle assets with asset:// prefix
-                        fileName.startsWith("asset://") -> {
-                            val assetName = fileName.replace("asset://", "")
-
-                            val afd = context.assets.openFd(assetName)
-                            setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                            afd.close()
-                        }
-                        // Check if it's a relative asset path (no prefix)
-                        !fileName.contains("/") && !fileName.contains("\\") -> {
-
-                            try {
-                                val afd = context.assets.openFd(fileName)
-                                setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                                afd.close()
-                            } catch (e: Exception) {
-                                throw e
-                            }
-                        }
-                        // Handle file URIs
-                        fileName.startsWith("file://") -> {
-                            val path = fileName.replace("file://", "")
-                            val file = File(path)
-                            if (file.exists()) {
-                                setDataSource(path)
-                            } else {
-                                throw java.io.FileNotFoundException("File not found: $path")
-                            }
-                        }
-                        // Default handling for regular paths
-                        else -> {
-                            Log.d(TAG, "Preparing from direct path")
-                            setDataSource(fileName)
-                        }
+            player.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_ENDED && !completionDispatched) {
+                        completionDispatched = true
+                        AudioEndFunction(
+                            mapOf("isPlaying" to false, "didJustFinish" to true)
+                        )
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error setting up data source: ${e.message}")
-                    throw e
                 }
-
-                // PREPARE but DON'T START
-                prepare()
-                cachedDuration = duration
-                setPlaybackParams(playbackParams)
-                // Set volume to maximum
-                setVolume(1.0f, 1.0f)
-
-                Log.d(TAG, "Player prepared successfully, ready for playback")
-            }
-            currentFileName = fileName  // Track the prepared file
+            })
             true
-        } catch (exception: Exception) {
-            Log.e(TAG, "preparePlayer: $exception")
-            currentFileName = null  // Clear on error
+        } catch (e: Exception) {
+            Log.e(TAG, "preparePlayer failed: ${e.message}")
+            currentFileName = null
             false
         }
     }
-
-    private var currentFileName: String? = null  // Track current prepared file
 
     override fun startPlaying(
         fileName: String,
         AudioEndFunction: (result: Map<String, Boolean>) -> Unit
     ): Boolean {
-        // Check if we already have a prepared player for THIS SPECIFIC file
-        _player?.let { existingPlayer ->
-            hasCompleted = false
-            try {
-                existingPlayer.setOnCompletionListener {
-                    val result = mapOf(
-                        "isPlaying" to false,
-                        "didJustFinish" to true,
-                    )
-                    hasCompleted = true
-                    AudioEndFunction(result)
-                }
-                // Only use existing player if it's the SAME file and not playing
-                if (currentFileName == fileName && !existingPlayer.isPlaying) {
-                    Log.d(TAG, "Using already prepared player for same file: $fileName")
-                    existingPlayer.start()
-                    return true
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Error checking existing player, will prepare new one: ${e.message}")
-            }
-        }
-
-        // If no prepared player or error, prepare and start
-        val prepareResult = preparePlayer(fileName, AudioEndFunction)
-        if (!prepareResult) {
-            return false
-        }
-
-        // Now start the prepared player
+        val existing = _player
         return try {
-            _player?.let { player ->
-                player.setOnCompletionListener {
-                    val result = mapOf(
-                        "isPlaying" to false,
-                        "didJustFinish" to true,
-                    )
-                    hasCompleted = true
-                    AudioEndFunction(result)
+            if (existing != null && currentFileName == fileName) {
+                when (existing.playbackState) {
+                    Player.STATE_ENDED -> {
+                        hasCompleted = false
+                        completionDispatched = false
+                        isPaused = false
+                        existing.seekTo(0L)
+                        existing.play()
+                        true
+                    }
+                    Player.STATE_READY, Player.STATE_BUFFERING, Player.STATE_IDLE -> {
+                        hasCompleted = false
+                        existing.play()
+                        true
+                    }
+                    else -> {
+                        hasCompleted = false
+                        existing.play()
+                        true
+                    }
                 }
-                player.start()
-                Log.d(TAG, "Started prepared player successfully")
+            } else {
+                if (!preparePlayer(fileName, AudioEndFunction)) return false
+                _player?.let { p ->
+                    hasCompleted = false
+                    p.play()
+                    true
+                } ?: false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "startPlaying failed, re-preparing: ${e.message}")
+            if (!preparePlayer(fileName, AudioEndFunction)) return false
+            _player?.let { p ->
+                hasCompleted = false
+                p.play()
                 true
             } ?: false
-        } catch (exception: Exception) {
-            Log.e(TAG, "Error starting prepared player: $exception")
-            false
-        }
-    }
-
-
-
-    override fun stopPlaying(): Boolean {
-        return try {
-            stopAndReleasePlayer()
-            isPaused = false
-            true
-        } catch (exception: Exception) {
-            Log.e(TAG, "stopPlaying: $exception")
-            false
         }
     }
 
     override fun pausePlaying(): Boolean {
+        val p = _player ?: return false
         return try {
-            _player?.let {
-                if (it.isPlaying) {
-                    it.pause()
-                    isPaused = true
-                    return true
-                }
+            if (p.isPlaying) {
+                p.pause()
+                isPaused = true
+                true
+            } else {
+                isPaused = true
+                true
             }
-            false
-        } catch (exception: Exception) {
-            Log.e(TAG, "pausePlaying: $exception")
+        } catch (e: Exception) {
+            Log.e(TAG, "pausePlaying: ${e.message}")
             false
         }
     }
 
     override fun resumePlaying(): Boolean {
+        val p = _player ?: return false
         return try {
-            _player?.let {
-                if (!it.isPlaying && isPaused) {
-                    it.start()
+            when (p.playbackState) {
+                Player.STATE_ENDED -> {
+                    hasCompleted = false
+                    completionDispatched = false
                     isPaused = false
-                    return true
+                    p.seekTo(0L)
+                    p.play()
+                    true
+                }
+                else -> {
+                    p.play()
+                    isPaused = false
+                    true
                 }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "resumePlaying: ${e.message}")
             false
-        } catch (exception: Exception) {
-            Log.e(TAG, "resumePlaying: $exception")
+        }
+    }
+
+    override fun stopPlaying(): Boolean {
+        return try {
+            stopAndReleasePlayer()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "stopPlaying: ${e.message}")
             false
         }
     }
 
     override fun seekTo(position: Int): Boolean {
         return try {
-            _player?.let {
-                // Android seekTo is in milliseconds
-                it.seekTo(position * 1000)
-                return true
-            }
-            false
-        } catch (exception: Exception) {
-            Log.e(TAG, "seekTo: $exception")
+            _player?.seekTo(position.toLong() * 1000L)
+            _player != null
+        } catch (e: Exception) {
+            Log.e(TAG, "seekTo: ${e.message}")
             false
         }
     }
 
+    override fun isPlaying(): Boolean = _player?.isPlaying ?: false
 
-    override fun isPlaying(): Boolean {
-        return _player?.isPlaying ?: false
-    }
-
-
-    override fun getPlaybackSpeed(): Float {
-        return playbackSpeed
-    }
-
+    override fun getPlaybackSpeed(): Float = playbackSpeed
 
     override fun getCurrentPosition(): Int {
         return try {
-            _player?.currentPosition ?: 0
+            (_player?.currentPosition ?: 0L).coerceAtLeast(0L).toInt()
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting current position: ${e.message}")
+            Log.e(TAG, "getCurrentPosition error: ${e.message}")
             0
         }
     }
 
-
-    override fun getAudioDuration(uri: String, context: Context): Int {
-        // Create a temporary MediaPlayer to get the duration
-        val tempPlayer = MediaPlayer()
-        var duration = 0
-
-        try {
-            // Handle different URI schemes
-            when {
-                uri.startsWith("asset://") -> {
-                    val assetName = uri.replace("asset://", "")
-                    val afd = context.assets.openFd(assetName)
-                    tempPlayer.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                    afd.close()
-                }
-                !uri.contains("/") && !uri.contains("\\") -> {
-                    try {
-                        val afd = context.assets.openFd(uri)
-                        tempPlayer.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                        afd.close()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error loading asset file for duration: $uri", e)
-                        throw e
-                    }
-                }
-                uri.startsWith("file://") -> {
-                    val path = uri.replace("file://", "")
-                    if (File(path).exists()) {
-                        tempPlayer.setDataSource(path)
-                    } else {
-                        throw java.io.FileNotFoundException("File not found: $path")
-                    }
-                }
-                else -> {
-                    tempPlayer.setDataSource(uri)
-                }
-            }
-
-            tempPlayer.prepare()
-            duration = tempPlayer.duration
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting audio duration: ${e.message}")
+    override fun getAudioDuration(uri: String): Long {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(uri)
+            val format = extractor.getTrackFormat(0)
+            (format.getLong(MediaFormat.KEY_DURATION) / 1000)
+        } catch (_: Exception) {
+            0L
         } finally {
-            try {
-                tempPlayer.release()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error releasing temp player: ${e.message}")
-            }
+            extractor.release()
         }
-
-        return duration
     }
 
     private fun stopAndReleasePlayer() {
         _player?.run {
-            try { if (isPlaying) stop() } catch (_: Exception) {}
-            try { reset() } catch (_: Exception) {}
+            try { stop() } catch (_: Exception) {}
+            try { clearMediaItems() } catch (_: Exception) {}
+            try {
+                sharedListener?.let { removeListener(it) }
+            } catch (_: Exception) {}
             try { release() } catch (_: Exception) {}
         }
         _player = null
         currentFileName = null
-        cachedDuration = 0
+        cachedDuration = 0L
         isPaused = false
+        hasCompleted = false
+        completionDispatched = false
+        sharedListener = null
     }
-
 
     override fun setPlaybackSpeed(speed: String): Boolean {
         return try {
             playbackSpeed = speed.toFloat()
             _player?.let { p ->
-                try {
-                    val pp = p.playbackParams
-                    p.playbackParams = pp.setSpeed(playbackSpeed)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to set speed on live player: ${e.message}")
-                }
+                try { p.playbackParameters = PlaybackParameters(playbackSpeed) }
+                catch (e: Exception) { Log.w(TAG, "Failed to set speed: ${e.message}") }
             }
             true
         } catch (_: NumberFormatException) {
@@ -323,23 +292,19 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
     }
 
     override fun playerStatus(): PlayerProgress {
-        val player = _player
-        if (player == null || player.duration <= 0) {
+        val p = _player
+        if (p == null || (p.duration <= 0 && !hasCompleted)) {
             return PlayerProgress(duration = 0, currentSeconds = 0, percentage = 0f)
         }
-        val current =if(hasCompleted) player.duration else player.currentPosition
-
-        val duration = player.duration
+        val duration = (if (p.duration > 0) p.duration else cachedDuration).coerceAtLeast(0L)
+        val current = if (hasCompleted) duration else p.currentPosition.coerceAtLeast(0L)
         val percentage = if (duration > 0) current.toFloat() / duration.toFloat() else 0f
-
-
         return PlayerProgress(
-            duration = duration,
-            currentSeconds = current,
+            duration = duration.toInt(),
+            currentSeconds = current.toInt(),
             percentage = percentage
         )
     }
-
 
     override fun releasePlayer() {
         stopAndReleasePlayer()
