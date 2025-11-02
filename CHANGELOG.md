@@ -1,3 +1,12 @@
+# [1.3.0](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.6...v1.3.0) (2025-11-02)
+
+
+### Features
+
+* configuring expo3 & chunks ([75ce31f](https://github.com/SGamrekelashvili/expo-audio-studio/commit/75ce31fa5a34439999975832e636782253e98fb0))
+* installing media3exo ([5388fde](https://github.com/SGamrekelashvili/expo-audio-studio/commit/5388fde0fc72f3b339e5648af8a987e27afdc9e2))
+* **ios:** add audio chunk recording ([9a72ccc](https://github.com/SGamrekelashvili/expo-audio-studio/commit/9a72cccf7c9b9ef989bdf1bc91476f8fc723ec75))
+
 ## [1.2.6](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.5...v1.2.6) (2025-10-28)
 
 
