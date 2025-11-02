@@ -75,6 +75,20 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
   resumeRecording(): string;
 
   /**
+   *  Set to true to listen to chunks
+   * @param listenToChunks Boolean value to enable or disable chunk listening
+   * @returns true if enabled, false if disabled
+   * disabled by default
+   *
+   * @example
+   * ```typescript
+   * const result = ExpoAudioStudio.setListenToChunks(true);
+   * console.log(result); // true or false
+   * ```
+   */
+  setListenToChunks(_listenToChunks: boolean): boolean;
+
+  /**
    * Gets the file path of the last recording
    *
    * @returns File path of the last recording, or null if no recording exists

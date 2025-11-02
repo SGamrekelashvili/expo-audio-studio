@@ -63,6 +63,10 @@ export type ExpoAudioStudioModuleEvents = {
   onRecorderAmplitude: (_params: AudioMeteringEvent) => void;
   onRecorderStatusChange: (_params: AudioRecordingStateChangeEvent) => void;
   onVoiceActivityDetected: (_params: VoiceActivityEvent) => void;
+  /**
+   *  returns audio chunk Base64 string
+   */
+  onAudioChunk: (_params: AudioChunkEvent) => void;
 };
 
 /**
@@ -124,6 +128,14 @@ export type VoiceActivityEvent = {
 
   /** Event type for better handling */
   eventType: 'speech_start' | 'speech_continue' | 'silence_start' | 'silence_continue';
+};
+
+/**
+ * Audio chunk event containing Base64 string
+ */
+export type AudioChunkEvent = {
+  /** Base64 encoded audio chunk */
+  base64: string;
 };
 
 // Permission Types
