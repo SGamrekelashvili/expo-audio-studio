@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, SafeAreaView, View, Text, TouchableOpacity, StatusBar } from 'react-native';
 import AudioPlayer from './components/AudioPlayer';
 import RecordingTab from './components/RecordingTab';
+import ChunkRecorder from './components/ChunkRecorder';
 
 const colors = {
   primary: '#6366F1',
@@ -13,7 +14,8 @@ const colors = {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'player' | 'recorder'>('player');
+  const [activeTab, setActiveTab] = useState<'player' | 'recorder' | 'chunk-recorder'>('player');
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -42,11 +44,19 @@ export default function App() {
               Recorder
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'chunk-recorder' && styles.activeTab]}
+            onPress={() => setActiveTab('chunk-recorder')}
+          >
+            <Text style={[styles.tabText, activeTab === 'chunk-recorder' && styles.activeTabText]}>
+              Chunk Recorder
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
       {/* Tab Content */}
-      {activeTab === 'player' ? <AudioPlayer /> : <RecordingTab />}
+      {activeTab === 'player' ? <AudioPlayer /> : activeTab === 'chunk-recorder' ? <ChunkRecorder /> : <RecordingTab />}
     </SafeAreaView>
   );
 }
