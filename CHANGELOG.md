@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.3.0...v1.3.1) (2025-11-02)
+
+
+### Bug Fixes
+
+* **ios:** compile error ([799f533](https://github.com/SGamrekelashvili/expo-audio-studio/commit/799f53362239870683a82617756c9f74a4962eba))
+
 # [1.3.0](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.6...v1.3.0) (2025-11-02)
 
 
