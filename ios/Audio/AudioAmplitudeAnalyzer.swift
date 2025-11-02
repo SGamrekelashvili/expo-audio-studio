@@ -3,7 +3,6 @@ import AVFoundation
 
 class AudioAmplitudeAnalyzer {
     
-    // MARK: - Types
     
     struct AmplitudeResult {
         let amplitudes: [Float]
@@ -13,13 +12,11 @@ class AudioAmplitudeAnalyzer {
         let error: String?
     }
     
-    // MARK: - Constants
     
-    private static let maxFileSize: Int64 = 100 * 1024 * 1024 // 100MB limit
-    private static let chunkSize: Int = 4096 // Process in 4KB chunks
-    private static let maxBarsCount: Int = 2048 // Maximum bars for performance
+    private static let maxFileSize: Int64 = 100 * 1024 * 1024
+    private static let chunkSize: Int = 4096
+    private static let maxBarsCount: Int = 2048
     
-    // MARK: - Public Methods
 
     static func getAudioAmplitudes(fileUrl: URL, barsCount: Int) -> AmplitudeResult {
         print("[\(Date())] AudioAmplitudeAnalyzer: Starting analysis for \(fileUrl.lastPathComponent)")
@@ -137,14 +134,13 @@ class AudioAmplitudeAnalyzer {
         do {
             let assetReader = try AVAssetReader(asset: asset)
             
-            // Configure audio output settings for optimal processing
             let outputSettings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatLinearPCM,
                 AVLinearPCMBitDepthKey: 16,
                 AVLinearPCMIsBigEndianKey: false,
                 AVLinearPCMIsFloatKey: false,
                 AVLinearPCMIsNonInterleaved: false,
-                AVSampleRateKey: 44100 // Downsample to 44.1kHz for efficiency
+                AVSampleRateKey: 44100
             ]
             
             guard let audioTrack = asset.tracks(withMediaType: .audio).first else {
@@ -204,7 +200,6 @@ class AudioAmplitudeAnalyzer {
                 
                 let samples = extractSamplesFromBuffer(sampleBuffer: sampleBuffer)
                 
-                // Process samples for current bar
                 for sample in samples {
                     if currentBarIndex >= barsCount { break }
                     

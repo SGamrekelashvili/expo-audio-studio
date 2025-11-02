@@ -15,6 +15,11 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
     private var stateLock = NSLock()
     private var isCleaningUp: Bool = false
     
+    // Audio chunks
+    private var enableListenToChunks: Bool = false
+    private var audioChunkCapture: AudioChunkCapture?
+    private var chunkCallback: (([String: Any]) -> Void)?
+    
     
     private func getOutputFilePath(customDirectory: String? = nil) -> URL {
         // Always generate a fresh path with timestamp to avoid conflicts
@@ -58,6 +63,13 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
     private var amplitudeCallback: ((Float) -> Void)?
     private var amplitudeUpdateInterval: TimeInterval = 1.0 / 60.0
     
+    func setListenToChunks(_ enable: Bool) -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        enableListenToChunks = enable
+        return enable
+    }
+    
     func setAmplitudeUpdateFrequency(_ frequencyHz: Double) {
         stateLock.lock()
         defer { stateLock.unlock() }
@@ -71,7 +83,8 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
     func startRecording(
         directoryPath: String? = nil,
         sendRecorderStatusEvent: @escaping (String) -> Void,
-        sendAmplitudeEvent: @escaping (Float) -> Void
+        sendAmplitudeEvent: @escaping (Float) -> Void,
+        sendChunkEvent: @escaping ([String: Any]) -> Void
     ) -> String {
         stateLock.lock()
         defer { stateLock.unlock() }
@@ -85,6 +98,7 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         
         self.statusCallback = sendRecorderStatusEvent
         self.amplitudeCallback = sendAmplitudeEvent
+        self.chunkCallback = sendChunkEvent
 
         do {
             let outputURL = getOutputFilePath(customDirectory: directoryPath)
@@ -126,6 +140,11 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
 
             isRecording = true
             self.lastRecordingOutput = outputURL
+            
+            // Start audio engine for chunk capture if enabled
+            if enableListenToChunks {
+                startChunkCapture()
+            }
 
             DispatchQueue.main.async { [weak self] in
                 sendRecorderStatusEvent("recording")
@@ -164,6 +183,7 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         }
         
         recorder.pause()
+        stopChunkCapture()
         
         DispatchQueue.main.async { [weak self] in
             self?.cleanupTimer()
@@ -183,6 +203,11 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         
         guard recorder.record() else {
             return "Failed to resume recording"
+        }
+        
+        // Restart chunk capture if enabled
+        if enableListenToChunks {
+            startChunkCapture()
         }
         
         DispatchQueue.main.async { [weak self] in
@@ -220,6 +245,7 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         isRecording = false
         self.lastRecordingOutput = recordingURL
         
+        stopChunkCapture()
         recordingStoppedCallback?()
         
         cleanupTimer()
@@ -260,6 +286,22 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         recordingStoppedCallback = callback
     }
     
+    // MARK: - Chunk Capture
+    
+    private func startChunkCapture() {
+        guard let callback = chunkCallback else { return }
+        
+        if audioChunkCapture == nil {
+            audioChunkCapture = AudioChunkCapture()
+        }
+        
+        audioChunkCapture?.startCapture(callback: callback)
+    }
+    
+    private func stopChunkCapture() {
+        audioChunkCapture?.stopCapture()
+    }
+    
     private func cleanupTimer() {
         if Thread.isMainThread {
             if let timer = self.recordTimer {
@@ -281,9 +323,12 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         guard !isCleaningUp else { return }
         isCleaningUp = true
         
+        stopChunkCapture()
+        audioChunkCapture = nil
         self.audioRecorder = nil
         self.recorderDelegate = nil
         self.amplitudeCallback = nil
+        self.chunkCallback = nil
         
         isCleaningUp = false
     }
@@ -314,6 +359,7 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         callback = statusCallback
         stateLock.unlock()
         
+        stopChunkCapture()
         cleanupTimer()
         
         DispatchQueue.main.async {

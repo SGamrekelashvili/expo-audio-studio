@@ -5,7 +5,7 @@ import SoundAnalysis
 @available(iOS 14.0, *)
 class EnhancedSoundClassificationManager: NSObject {
     
-    private var audioEngine: AVAudioEngine?
+    private let sharedEngine = SharedAudioEngineManager.shared
     private var streamAnalyzer: SNAudioStreamAnalyzer?
     private var soundClassifier: SNClassifySoundRequest?
     
@@ -27,7 +27,13 @@ class EnhancedSoundClassificationManager: NSObject {
     private let voiceSoundIdentifiers: Set<String> = [
         "speech", "conversation", "narration", "monologue", "singing",
         "human_voice", "male_speech", "female_speech", "child_speech",
-        "speech_synthesizer", "voice", "talk", "speaking"
+        "speech_synthesizer", "voice", "talk", "speaking",
+        "speaking", "conversation", "dialog", "dialogue",
+          "narration", "monologue",
+          "male speech", "man speaking",
+          "female speech", "woman speaking",
+          "child speech", "kid speaking",
+          "public speaking", "lecture", "debate", "interview", "podcast"
     ]
     
     func startVoiceActivityDetection(callback: @escaping ([String: Any]) -> Void) -> String {
@@ -56,11 +62,11 @@ class EnhancedSoundClassificationManager: NSObject {
     
     func updateThreshold(_ threshold: Float) {
         guard threshold >= 0.0 && threshold <= 1.0 else {
-            print("⚠️ Threshold must be between 0.0 and 1.0")
+            print("Threshold must be between 0.0 and 1.0")
             return
         }
         voiceConfidenceThreshold = threshold
-        print("🎚️ Threshold updated to \(threshold)")
+        print("Threshold updated to \(threshold)")
     }
     
     // MARK: - Standalone Detection Implementation
@@ -68,15 +74,19 @@ class EnhancedSoundClassificationManager: NSObject {
     @available(iOS 14.0, *)
     private func startSoundClassificationDetection() -> String {
         do {
-            // Create audio engine
-            audioEngine = AVAudioEngine()
-            guard let audioEngine = audioEngine else { return "SetupError" }
+            // SharedEngine provides 16kHz audio - create analyzer with matching format
+            let audioFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 16000,
+                channels: 1,
+                interleaved: false
+            )
             
-            // Setup audio engine and analyzer
-            let inputNode = audioEngine.inputNode
-            let recordingFormat = inputNode.outputFormat(forBus: 0)
+            guard let format = audioFormat else {
+                return "SetupError: Failed to create audio format"
+            }
             
-            streamAnalyzer = SNAudioStreamAnalyzer(format: recordingFormat)
+            streamAnalyzer = SNAudioStreamAnalyzer(format: format)
             soundClassifier = try SNClassifySoundRequest(classifierIdentifier: .version1)
             soundClassifier?.windowDuration = CMTimeMakeWithSeconds(windowDuration, preferredTimescale: 48000)
             soundClassifier?.overlapFactor = Double(overlapFactor)
@@ -86,38 +96,35 @@ class EnhancedSoundClassificationManager: NSObject {
             }
             try streamAnalyzer?.add(classifier, withObserver: self)
             
-            inputNode.installTap(onBus: 0, bufferSize: 8192, format: recordingFormat) { [weak self] buffer, time in
-                guard let self = self else { return }
+            // Enable VAD in shared engine (will receive pre-converted 16kHz buffers)
+            sharedEngine.enableVADCapture { [weak self] buffer, time in
+                guard let self = self, let analyzer = self.streamAnalyzer else { return }
                 let framePosition = time.sampleTime
-                self.streamAnalyzer?.analyze(buffer, atAudioFramePosition: framePosition)
+                analyzer.analyze(buffer, atAudioFramePosition: framePosition)
             }
             
-            try audioEngine.start()
             isAnalyzing = true
             
             return "Success"
             
         } catch {
-            print("❌ Failed to start voice activity detection: \(error)")
+            print("Failed to start voice activity detection: \(error)")
             return "StartError: \(error.localizedDescription)"
         }
     }
     
     private func stopStandaloneDetection() -> String {
-        // Stop audio engine
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
+        // Disable VAD in shared engine
+        sharedEngine.disableVADCapture()
+        
+        // Clean up analyzer
         streamAnalyzer?.removeAllRequests()
-        
-        
-        // Clean up
-        audioEngine = nil
         streamAnalyzer = nil
         soundClassifier = nil
         isAnalyzing = false
         voiceActivityCallback = nil
         
-        print("🛑 Voice activity detection stopped")
+        print("Voice activity detection stopped")
         return "Success"
     }
     
@@ -199,7 +206,7 @@ extension EnhancedSoundClassificationManager: SNResultsObserving {
     }
     
     func request(_ request: SNRequest, didFailWithError error: Error) {
-        print("❌ Sound classification request failed: \(error)")
+        print("Sound classification request failed: \(error)")
         DispatchQueue.main.async { [weak self] in
             let event: [String: Any] = [
                 "isVoiceDetected": false,
@@ -213,6 +220,6 @@ extension EnhancedSoundClassificationManager: SNResultsObserving {
     }
     
     func requestDidComplete(_ request: SNRequest) {
-        print("✅ Sound classification request completed")
+        print("Sound classification request completed")
     }
 }
