@@ -16,10 +16,13 @@ interface AudioRecorderProvider {
     fun recorderTimeElapsed(): StateFlow<RecorderProgress>
     fun recorderMetrics(): StateFlow<RecorderMetrics>
     fun releaseRecorder()
-    
+    fun setAmplitudeUpdateFrequency(threshold: Double)
     // MARK: - Voice Activity Detection Methods
+    fun setVADEventMode(mode: String, throttleMs: Int = 100):String
+    fun requestAutoStartVAD()
     fun startVoiceActivityDetection(): String
     fun stopVoiceActivityDetection(): String
     fun setVoiceActivityThreshold(threshold: Float): String
     fun isVoiceActivityDetectionActive(): Boolean
+    fun setListenToChunks(enable: Boolean):Boolean
 }

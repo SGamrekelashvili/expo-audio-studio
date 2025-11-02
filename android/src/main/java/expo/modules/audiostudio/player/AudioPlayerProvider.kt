@@ -11,7 +11,7 @@ interface AudioPlayerProvider {
     fun seekTo(position: Int): Boolean
     fun isPlaying(): Boolean
     fun getPlaybackSpeed(): Float
-    fun getAudioDuration(uri: String, context: Context): Int
+    fun getAudioDuration(uri: String): Long
     fun getCurrentPosition(): Int
     fun playerStatus(): PlayerProgress?
     fun releasePlayer()
