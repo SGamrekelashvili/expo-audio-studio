@@ -30,6 +30,7 @@
 ## What's included
 
 - Record high-quality audio (WAV/PCM16 format, 16kHz, 16-bit mono)
+- Capture real-time audio chunks during recording (PCM base64 encoded)
 - Play audio with speed control and seeking
 - Detect when someone is speaking (voice activity detection)
 - Get real-time amplitude data and waveform visualizations
@@ -155,6 +156,42 @@ const vadSubscription = ExpoAudioStudio.addListener(
 ExpoAudioStudio.startRecording();
 ```
 
+### Capture audio chunks
+
+```typescript
+import ExpoAudioStudio from 'expo-audio-studio';
+import { encode as base64Encode, decode as base64Decode } from 'base-64';
+
+// Enable chunk listening (disabled by default)
+ExpoAudioStudio.setListenToChunks(true);
+
+// Store chunks as they arrive
+const audioChunks: string[] = [];
+
+// Listen to audio chunks during recording
+const chunkSubscription = ExpoAudioStudio.addListener(
+  'onAudioChunk',
+  (event: AudioChunkEvent) => {
+    // event.base64 contains raw PCM audio data (Int16, 16kHz, mono)
+    audioChunks.push(event.base64);
+    console.log('Received chunk, total:', audioChunks.length);
+  }
+);
+
+// Start recording - chunks will be sent in real-time
+ExpoAudioStudio.startRecording();
+
+// Later, when stopping...
+ExpoAudioStudio.stopRecording();
+
+// Process the chunks - decode, concatenate, add WAV header, etc.
+// See example/components/ChunkRecorder.tsx for full implementation
+
+// Cleanup
+chunkSubscription.remove();
+ExpoAudioStudio.setListenToChunks(false);
+```
+
 ### Play audio
 
 ```typescript
@@ -182,13 +219,14 @@ playerSubscription.remove();
 
 ### Recording Functions
 
-| Function                         | Description             | Returns                    |
-| -------------------------------- | ----------------------- | -------------------------- |
-| `startRecording(directoryPath?)` | Start audio recording   | `string` - File path       |
-| `stopRecording()`                | Stop recording          | `string` - Final file path |
-| `pauseRecording()`               | Pause recording         | `string` - Status message  |
-| `resumeRecording()`              | Resume recording        | `string` - Status message  |
-| `lastRecording()`                | Get last recording path | `string` or `null`         |
+| Function                         | Description                        | Returns                    |
+| -------------------------------- | ---------------------------------- | -------------------------- |
+| `startRecording(directoryPath?)` | Start audio recording              | `string` - File path       |
+| `stopRecording()`                | Stop recording                     | `string` - Final file path |
+| `pauseRecording()`               | Pause recording                    | `string` - Status message  |
+| `resumeRecording()`              | Resume recording                   | `string` - Status message  |
+| `setListenToChunks(enabled)`     | Enable/disable real-time chunk capture | `boolean` - Enabled state |
+| `lastRecording()`                | Get last recording path            | `string` or `null`         |
 
 ### Playback Functions
 
@@ -247,10 +285,20 @@ ExpoAudioStudio.addListener(
     // event.status: 'recording' | 'stopped' | 'paused' | 'resumed' | 'error'
   }
 );
+
 const subscription = ExpoAudioStudio.addListener(
   'onRecorderAmplitude',
   (event: AudioMeteringEvent) => {
     // event.amplitude: number (dB level)
+  }
+);
+
+// Listen to audio chunks (requires setListenToChunks(true))
+const chunkSubscription = ExpoAudioStudio.addListener(
+  'onAudioChunk',
+  (event: AudioChunkEvent) => {
+    // event.base64: string - Base64 encoded PCM audio data
+    // Format: Int16 samples, 16kHz sample rate, mono channel
   }
 );
 ```
