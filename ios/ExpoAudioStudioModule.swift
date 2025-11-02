@@ -7,7 +7,6 @@ enum SessionSetupType {
     case play
 }
 
-// Enum for standardized error messages
 enum AudioError: String, Error {
     case noPlayer = "NoPlayerException"
     case playbackFailed = "PlaybackFailedException: Unknown error"
@@ -21,7 +20,6 @@ enum AudioError: String, Error {
     case invalidURI = "InvalidURIException: Provided URI is not valid"
 }
 
-// Custom errors for audio session operations
 enum AudioSessionError: Error, LocalizedError {
     case activationFailed(Error)
     case categorySetupFailed(Error)
@@ -96,6 +94,10 @@ public class ExpoAudioStudioModule: Module {
         print("[\(Date())] sendVoiceActivityEvent: \(event)")
         sendEvent("onVoiceActivityDetected", event)
     }
+    
+    private func sendAudioChunkEvent(_ chunk: [String: Any]) {
+        sendEvent("onAudioChunk", chunk)
+    }
 
     private func setupNotificationObservers() {
         print("[\(Date())] Setting up notification observers...")
@@ -124,13 +126,10 @@ public class ExpoAudioStudioModule: Module {
         print("[\(Date())] Notification observers removed")
     }
 
-    /**
-     Defines the module's properties, functions, and lifecycle hooks for Expo.
-     */
+
     public func definition() -> ModuleDefinition {
         Name("ExpoAudioStudio")
         
-        // Called when the module is created
         OnCreate {
             print("[\(Date())] ExpoAudioStudioModule: OnCreate called")
             setupNotificationObservers() 
@@ -151,12 +150,14 @@ public class ExpoAudioStudioModule: Module {
             _ = audioManager.stopPlayingAudio()
             _ = recorderManager.stopRecording()
             
+            SharedAudioEngineManager.shared.forceStop()
+            
             if #available(iOS 14.0, *) {
                   if let manager = self.soundClassificationManager, manager.isVoiceActivityDetectionActive() {
                       _ = manager.stopVoiceActivityDetection()
                   }
-                  self.soundClassificationManager = nil // MEMORY FIX: Release manager
-                  self.isVADEnabledFromJS = false // VAD OPTIMIZATION: Clear JS enable state
+                  self.soundClassificationManager = nil
+                  self.isVADEnabledFromJS = false
               }
             
             print("[\(Date())] Cleanup complete.")
@@ -166,7 +167,8 @@ public class ExpoAudioStudioModule: Module {
             "onPlayerStatusChange",
             "onRecorderStatusChange",
             "onRecorderAmplitude",
-            "onVoiceActivityDetected"
+            "onVoiceActivityDetected",
+            "onAudioChunk"
         )
         
         // MARK: - Recording Functions
@@ -185,7 +187,6 @@ public class ExpoAudioStudioModule: Module {
                 let cleanPath = customDir.replacingOccurrences(of: "file://", with: "")
                 directory = URL(fileURLWithPath: cleanPath)
             } else {
-                // Use default documents directory
                 directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             }
             
@@ -231,7 +232,6 @@ public class ExpoAudioStudioModule: Module {
                 return "Error: At least 2 audio files are required for joining"
             }
             
-            // Validate input files exist
             var inputURLs: [URL] = []
             for (index, path) in filePaths.enumerated() {
                 let cleanPath = path.replacingOccurrences(of: "file://", with: "")
@@ -246,20 +246,16 @@ public class ExpoAudioStudioModule: Module {
                 inputURLs.append(url)
             }
             
-            // Prepare output file
             let cleanOutputPath = outputPath.replacingOccurrences(of: "file://", with: "")
             let outputURL = URL(fileURLWithPath: cleanOutputPath)
             
-            // Create output directory if needed
             try? FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
             
-            // Delete existing output file if it exists
             if FileManager.default.fileExists(atPath: outputURL.path) {
                 try? FileManager.default.removeItem(at: outputURL)
                 print("[\(Date())] Deleted existing output file")
             }
             
-            // Use AVMutableComposition to stitch inputs together
             let composition = AVMutableComposition()
             guard let compositionAudioTrack = composition.addMutableTrack(
                 withMediaType: .audio,
@@ -270,7 +266,6 @@ public class ExpoAudioStudioModule: Module {
             
             print("[\(Date())] Created AVMutableComposition")
             
-            // Add each audio file to the composition
             for (index, inputURL) in inputURLs.enumerated() {
                 print("[\(Date())] Adding file \(index): \(inputURL.lastPathComponent)")
                 
@@ -296,7 +291,6 @@ public class ExpoAudioStudioModule: Module {
             let totalDuration = CMTimeGetSeconds(composition.duration)
             print("[\(Date())] Total composition duration: \(totalDuration) seconds")
             
-            // Export the composition to a file
             guard let exportSession = AVAssetExportSession(
                 asset: composition,
                 presetName: AVAssetExportPresetPassthrough
@@ -309,7 +303,6 @@ public class ExpoAudioStudioModule: Module {
             
             print("[\(Date())] Starting export session...")
             
-            // Use a semaphore to wait for async export
             let semaphore = DispatchSemaphore(value: 0)
             var exportResult: String = ""
             
@@ -318,7 +311,6 @@ public class ExpoAudioStudioModule: Module {
                 case .completed:
                     print("[\(Date())] Export completed successfully!")
                     
-                    // Verify the output file
                     if FileManager.default.fileExists(atPath: outputURL.path) {
                         do {
                             let fileSize = try FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int64 ?? 0
@@ -349,7 +341,6 @@ public class ExpoAudioStudioModule: Module {
                 semaphore.signal()
             }
             
-            // Wait for export to complete (with timeout)
             let timeoutResult = semaphore.wait(timeout: .now() + 30.0) // 30 second timeout
             
             if timeoutResult == .timedOut {
@@ -368,14 +359,15 @@ public class ExpoAudioStudioModule: Module {
             return "Amplitude frequency set to \(frequencyHz) Hz"
         }
         
+        Function("setListenToChunks") { (enable: Bool) -> Bool in
+            print("[\(Date())] setListenToChunks called with enable: \(enable)")
+            return self.recorderManager.setListenToChunks(enable)
+        }
+        
         Function("startRecording") { (directoryPath: String?) -> String in
             print("[\(Date())] startRecording function called with directory: \(directoryPath ?? "default")")
             let _ = self.audioManager.stopPlayingAudio()
-            // Audio session configuration now handled from JavaScript side
-            
-            // Stop any playing audio first to prevent conflicts
-            
-            // Start recording using the RecorderManager with custom directory
+          
             let result = self.recorderManager.startRecording(
                 directoryPath: directoryPath,
                 sendRecorderStatusEvent: { status in
@@ -394,37 +386,35 @@ public class ExpoAudioStudioModule: Module {
                 },
                 sendAmplitudeEvent: { amplitude in
                     self.sendAmplitudeEvent(amplitude: amplitude)
+                },
+                sendChunkEvent: { chunk in
+                    self.sendAudioChunkEvent(chunk)
                 }
             )
             
-            // Return potential error from startRecording, or success message
             return result
         }
         
         Function("stopRecording") { () -> String in
             print("[\(Date())] stopRecording function called")
             
-            // Stop VAD when recording stops (if it was running)
-            if #available(iOS 14.0, *) {
+     
                 let vadActive = self.soundClassificationManager?.isVoiceActivityDetectionActive() ?? false
                 if vadActive {
                     print("[\(Date())] Auto-stopping VAD because recording stopped")
                     let vadResult = self.soundClassificationManager?.stopVoiceActivityDetection() ?? "NotActive"
                     print("[\(Date())] VAD auto-stop result: \(vadResult)")
                 }
-            }
             
             let result = self.recorderManager.stopRecording()
             return result
         }
         
-        // Function to pause audio recording
         Function("pauseRecording") { () -> String in
             print("[\(Date())] pauseRecording function called.")
             return self.recorderManager.pauseRecording()
         }
         
-        // Function to resume audio recording
         Function("resumeRecording") { () -> String in
             print("[\(Date())] resumeRecording function called.")
             return self.recorderManager.resumeRecording()
@@ -432,11 +422,9 @@ public class ExpoAudioStudioModule: Module {
         
         // MARK: - Playback Functions
         
-        // Function to prepare audio player without starting playback
         Function("preparePlayer") { (path: String) -> String in
             print("[\(Date())] preparePlayer function called with path: \(path)")
             
-            // Use AudioManager to prepare player
             if let result = self.audioManager.preparePlayer(path: path, sendPlayerStatusEvent: { isPlaying, didJustFinish in
                 self.sendPlayerStatusEvent(isPlaying: isPlaying, didJustFinish: didJustFinish)
             }) {
@@ -448,11 +436,8 @@ public class ExpoAudioStudioModule: Module {
         
         Function("startPlaying") { (path: String) -> String in
             print("[\(Date())] startPlaying function called with path: \(path)")
-            // Audio session configuration now handled from JavaScript side
             
-            // Use AudioManager to start playback
             if let result = self.audioManager.startPlayingAudio(path: path, sendPlayerStatusEvent: { isPlaying, didJustFinish in
-                // Audio session deactivation now handled from JavaScript side
                 self.sendPlayerStatusEvent(isPlaying: isPlaying, didJustFinish: didJustFinish)
             }) {
                 return result
@@ -476,7 +461,6 @@ public class ExpoAudioStudioModule: Module {
                 return AudioError.invalidSpeedFormat.rawValue
             }
             
-            // Validate speed range (0.5 to 2.0)
             if speedFloat >= 0.5 && speedFloat <= 2.0 {
                 _ = audioManager.setPlaybackSpeed(speed: speedFloat)
                 return "Playback speed set to \(speedFloat)"
@@ -486,19 +470,16 @@ public class ExpoAudioStudioModule: Module {
             }
         }
         
-        // Function to seek to a specific position in the audio
         Function("seekTo") { (position: Double) -> String in
             return audioManager.seekToTime(position: position)
         }
         
-        // Function to pause audio playback
         Function("pausePlayer") { () -> String in
             print("[\(Date())] pausePlayer function called.")
             
             let result = self.audioManager.pausePlayingAudio()
             if result != AudioError.noPlayer.rawValue {
                 self.sendPlayerStatusEvent(isPlaying: false, didJustFinish: false)
-                // Audio session management now handled from JavaScript side
             }
             return result
         }
@@ -506,11 +487,9 @@ public class ExpoAudioStudioModule: Module {
         Function("resumePlayer") { () -> String in
             print("[\(Date())] resumePlayer function called.")
             
-            // Audio session reactivation now handled from JavaScript side
             
             let result = self.audioManager.resumePlayingAudio()
             if result != AudioError.noPlayer.rawValue {
-                // Send player status indicating it's playing again
                 self.sendPlayerStatusEvent(isPlaying: true, didJustFinish: false)
             }
             return result
@@ -518,22 +497,19 @@ public class ExpoAudioStudioModule: Module {
         
         // MARK: - Audio Information Properties
         
-        // Property to get the current playback position
         Property("currentPosition") {
-            // Return current time if player exists, otherwise 0.0
             return audioManager.getPlayer()?.currentTime ?? 0.0
         }
         
         // MARK: - Permission Request Functions
         
-        // Asynchronous function to request microphone permission
         AsyncFunction("requestMicrophonePermission") { (promise: Promise) in
             AVAudioSession.sharedInstance().requestRecordPermission { granted in
                 let status: String = granted ? "granted" : "denied"
                 
                 let permissionResponse: [String: Any] = [
                     "status": status,
-                    "canAskAgain": true, // iOS always allows asking again via Settings
+                    "canAskAgain": true,
                     "granted": granted
                 ]
                 
@@ -541,7 +517,6 @@ public class ExpoAudioStudioModule: Module {
             }
         }
         
-        // Asynchronous function to get the current microphone permission status
         AsyncFunction("getMicrophonePermissionStatus") { (promise: Promise) in
             let status = AVAudioSession.sharedInstance().recordPermission
             var statusString = "undetermined"
@@ -556,12 +531,12 @@ public class ExpoAudioStudioModule: Module {
             case .undetermined:
                 statusString = "undetermined"
             @unknown default:
-                statusString = "undetermined" // Handle future unknown cases
+                statusString = "undetermined"
             }
             
             let permissionResponse: [String: Any] = [
                 "status": statusString,
-                "canAskAgain": true, // iOS always allows changing in Settings
+                "canAskAgain": true,
                 "granted": isGranted
             ]
             
@@ -575,13 +550,11 @@ public class ExpoAudioStudioModule: Module {
                 return 0.0
             }
             
-            // Check if it's a file URL and if the file exists before attempting to get duration
             if audioURL.isFileURL && !FileManager.default.fileExists(atPath: audioURL.path) {
                 print("[\(Date())] getDuration: File not found for getDuration at path: \(audioURL.path)")
                 return 0.0
             }
             
-            // Use AVURLAsset for efficient duration retrieval without loading the entire audio data
             let asset = AVURLAsset(url: audioURL)
             let duration = asset.duration
             let durationInSeconds = CMTimeGetSeconds(duration)
@@ -638,17 +611,14 @@ public class ExpoAudioStudioModule: Module {
             }
         }
         
-        // Property to get the current audio meter level during recording
         Property("meterLevel") {
-            // Return current meter level if recording, otherwise a low default value
             guard let recorder = recorderManager.getRecorder(), recorder.isRecording else {
-                return -160.0 // Default low value when not recording (dB)
+                return -160.0
             }
             recorder.updateMeters()
             return Double(recorder.averagePower(forChannel: 0))
         }
         
-        // Property to provide detailed player status
         Property("playerStatus") {
             guard let player = self.audioManager.getPlayer() else {
                 return [
@@ -689,12 +659,9 @@ public class ExpoAudioStudioModule: Module {
         Function("setVADEnabled") { (enabled: Bool) -> String in
             print("[\(Date())] setVADEnabled function called with enabled: \(enabled)")
             
-            if #available(iOS 14.0, *) {
                 if enabled {
-                    // Set VAD preference
                     self.isVADEnabledFromJS = true
                     
-                    // If recording is active, start VAD immediately
                     let isRecording = self.recorderManager.getRecorder()?.isRecording ?? false
                     if isRecording {
                         let result = self.getSoundClassificationManager().startVoiceActivityDetection { [weak self] event in
@@ -705,31 +672,24 @@ public class ExpoAudioStudioModule: Module {
                         return "VAD enabled: Will auto-start with next recording"
                     }
                 } else {
-                    // Disable VAD preference and stop if active
                     self.isVADEnabledFromJS = false
                     let result = self.soundClassificationManager?.stopVoiceActivityDetection() ?? "NotActive"
                     return "VAD disabled: \(result)"
                 }
-            } else {
-                return "UnsupportedIOSVersion: Voice activity detection requires iOS 14.0 or later"
-            }
+          
         }
 
         Property("isVADActive") {
-            if #available(iOS 14.0, *) {
                 return self.soundClassificationManager?.isVoiceActivityDetectionActive() ?? false
-            } else {
-                return false
-            }
         }
         
         Property("isVADEnabled") {
             return self.isVADEnabledFromJS
         }
         
-        //"onChange", "onEveryFrame", "throttled" 
+        //"onChange", "onEveryFrame", "throttled"
         Function("setVADEventMode") { (mode: String, throttleMs: Int?) -> String in
-            if #available(iOS 14.0, *) {
+          
                 let manager = self.getSoundClassificationManager()
                 manager.vadEventMode = mode
                 
@@ -738,9 +698,7 @@ public class ExpoAudioStudioModule: Module {
                 }
                 
                 return "VAD event mode set to: \(mode)" + (throttleMs != nil ? " with \(throttleMs!)ms throttle" : "")
-            } else {
-                return "UnsupportedIOSVersion: Voice activity detection requires iOS 14.0 or later"
-            }
+          
         }
         
         
@@ -761,20 +719,16 @@ public class ExpoAudioStudioModule: Module {
     
     // MARK: - Audio Session Implementation
     
-    /**
-     Configures the audio session with specified category, mode, and options
-     */
+
     private func configureAudioSessionAsync(config: [String: Any]) throws {
         let session = AVAudioSession.sharedInstance()
         
-        // Parse category
         guard let categoryString = config["category"] as? String else {
             throw AudioSessionError.categorySetupFailed(NSError(domain: "AudioSession", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing category"]))
         }
         
         let category = try parseAudioSessionCategory(categoryString)
         
-        // Parse mode (optional, defaults to .default)
         let mode: AVAudioSession.Mode
         if let modeString = config["mode"] as? String {
             mode = try parseAudioSessionMode(modeString)
@@ -782,7 +736,6 @@ public class ExpoAudioStudioModule: Module {
             mode = .default
         }
         
-        // Parse options (optional)
         var categoryOptions: AVAudioSession.CategoryOptions = []
         if let options = config["options"] as? [String: Bool] {
             categoryOptions = parseAudioSessionOptions(options)
@@ -796,9 +749,7 @@ public class ExpoAudioStudioModule: Module {
         }
     }
     
-    /**
-     Activates the audio session
-     */
+
     private func activateAudioSessionAsync() throws {
         do {
             try AVAudioSession.sharedInstance().setActive(true, options: [.notifyOthersOnDeactivation])
@@ -807,10 +758,7 @@ public class ExpoAudioStudioModule: Module {
             throw AudioSessionError.categorySetupFailed(error)
         }
     }
-    
-    /**
-     Deactivates the audio session
-     */
+
     private func deactivateAudioSessionAsync() throws {
         do {
             try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
@@ -874,7 +822,7 @@ public class ExpoAudioStudioModule: Module {
             categoryOptions.insert(.duckOthers)
         }
         if options["allowBluetooth"] == true {
-            categoryOptions.insert(.allowBluetooth)
+            categoryOptions.insert(.allowBluetoothHFP)
         }
         if options["allowBluetoothA2DP"] == true {
             categoryOptions.insert(.allowBluetoothA2DP)
@@ -910,10 +858,7 @@ public class ExpoAudioStudioModule: Module {
     
     // MARK: - Audio Session Interruption Handler
         
-    /**
-     Handles audio session interruptions (e.g., phone call, alarm).
-     Pauses playback/recording when interruption begins and attempts to resume playback if applicable when it ends.
-     */
+
     @objc func handleAudioSessionInterruption(notification: Notification) {
         guard let userInfo = notification.userInfo,
               let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
@@ -923,8 +868,7 @@ public class ExpoAudioStudioModule: Module {
 
         switch type {
         case .began:
-            // Audio session interrupted. Pause playback/recording.
-            print("[\(Date())] ⏸️ Audio session interruption BEGAN")
+            print("[\(Date())] Audio session interruption BEGAN")
             
             wasPlayingBeforeInterruption = audioManager.getPlayer()?.isPlaying == true
             wasRecordingBeforeInterruption = recorderManager.getRecorder()?.isRecording == true
@@ -936,21 +880,21 @@ public class ExpoAudioStudioModule: Module {
             }
             if wasRecordingBeforeInterruption {
                 print("[\(Date())] Stopping recording due to interruption")
-                // For recording, it's often safer to stop entirely
                 _ = recorderManager.stopRecording()
                 sendRecorderStatusEvent(status: "interrupted")
             }
+            
+            if SharedAudioEngineManager.shared.isActive() {
+                print("[\(Date())] Stopping SharedAudioEngine due to interruption")
+                SharedAudioEngineManager.shared.forceStop()
+            }
 
         case .ended:
-            // Audio session interruption ended
-            print("[\(Date())] ✅ Audio session interruption ENDED")
+            print("[\(Date())] Audio session interruption ENDED")
             guard let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else { return }
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
             
-            // Try to reactivate audio session (for playback, assuming the last active category was playback)
-            // Note: If recording was interrupted, the session category might need to be re-set to playAndRecord before resuming recording.
-            // Audio session reactivation after interruption now handled from JavaScript side
-
+        
             if options.contains(.shouldResume) {
                 print("[\(Date())] Should resume after interruption")
                 if wasPlayingBeforeInterruption {
@@ -958,23 +902,17 @@ public class ExpoAudioStudioModule: Module {
                     print("[\(Date())] Resumed playback after interruption")
                     sendPlayerStatusEvent(isPlaying: true, didJustFinish: false)
                 }
-                // Note: Recording is NOT auto-resumed for user safety/privacy reasons.
-                // The user must explicitly restart recording.
             } else {
                 print("[\(Date())] Should NOT resume after interruption")
             }
 
         @unknown default:
-            print("[\(Date())] ❓ Unknown audio session interruption type")
+            print("[\(Date())] Unknown audio session interruption type")
         }
     }
         
     // MARK: - Audio Route Change Handler
-        
-    /**
-     Handles changes in the audio route (e.g., headphones plugged in/out, Bluetooth device connected/disconnected).
-     Pauses playback or stops recording if the relevant output/input device becomes unavailable.
-     */
+
     @objc func handleRouteChange(notification: Notification) {
         guard let userInfo = notification.userInfo,
               let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
@@ -982,30 +920,28 @@ public class ExpoAudioStudioModule: Module {
             return
         }
 
-        print("[\(Date())] 🎧 Audio route changed. Reason: \(reason.rawValue)")
+        print("[\(Date())] Audio route changed. Reason: \(reason.rawValue)")
         
         switch reason {
         case .newDeviceAvailable:
-            print("[\(Date())] ✅ New audio device available")
+            print("[\(Date())] New audio device available")
             
             if hasBluetoothOutput() {
-                print("[\(Date())] 🎧 Bluetooth device connected")
+                print("[\(Date())] Bluetooth device connected")
             }
             if hasWiredHeadphones() {
-                print("[\(Date())] 🎧 Wired headphones connected")
+                print("[\(Date())] Wired headphones connected")
             }
             
         case .oldDeviceUnavailable:
-            print("[\(Date())] ❌ Audio device disconnected")
+            print("[\(Date())] Audio device disconnected")
             
-            // If playback is active and output device is unavailable, pause playback
             if audioManager.getPlayer()?.isPlaying == true {
                 print("[\(Date())] Pausing playback due to device disconnection")
                 _ = audioManager.pausePlayingAudio()
                 sendPlayerStatusEvent(isPlaying: false, didJustFinish: false)
             }
             
-            // If recording is active, stop it for privacy/safety
             if recorderManager.getRecorder()?.isRecording == true {
                 print("[\(Date())] Stopping recording due to device disconnection")
                 _ = recorderManager.stopRecording()
@@ -1013,31 +949,30 @@ public class ExpoAudioStudioModule: Module {
             }
             
         case .categoryChange:
-            print("[\(Date())] 📱 Audio session category changed")
+            print("[\(Date())] Audio session category changed")
             
         case .override:
-            print("[\(Date())] 🔄 Audio session output overridden")
+            print("[\(Date())] Audio session output overridden")
             
         case .wakeFromSleep:
-            print("[\(Date())] 😴 Audio session woke from sleep")
+            print("[\(Date())] Audio session woke from sleep")
             
         case .noSuitableRouteForCategory:
-            print("[\(Date())] ❌ No suitable route for current category")
+            print("[\(Date())] No suitable route for current category")
             
         case .routeConfigurationChange:
-            print("[\(Date())] ⚙️ Audio route configuration changed")
+            print("[\(Date())] Audio route configuration changed")
             
         case .unknown:
-            print("[\(Date())] ❓ Unknown audio route change reason")
+            print("[\(Date())] Unknown audio route change reason")
             
         @unknown default:
-            print("[\(Date())] ❓ Unhandled audio route change reason")
+            print("[\(Date())] Unhandled audio route change reason")
         }
     }
     
     // MARK: - Helper Functions
     
-    // Helper function to get audio file duration
     private func getAudioDuration(url: URL) -> Double {
         do {
             let audioFile = try AVAudioFile(forReading: url)
