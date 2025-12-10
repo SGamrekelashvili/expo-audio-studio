@@ -1,3 +1,15 @@
+# [1.4.0-beta.1](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.3.0...v1.4.0-beta.1) (2025-12-10)
+
+
+### Bug Fixes
+
+* **ios:** compile error ([799f533](https://github.com/SGamrekelashvili/expo-audio-studio/commit/799f53362239870683a82617756c9f74a4962eba))
+
+
+### Features
+
+* convert base64 chunks to PCM & memory leaks ([d6b895d](https://github.com/SGamrekelashvili/expo-audio-studio/commit/d6b895dece522ab9bd366c76b103d2b8c9f42a40))
+
 # [1.3.0](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.2.6...v1.3.0) (2025-11-02)
 
 
