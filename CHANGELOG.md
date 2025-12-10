@@ -1,3 +1,10 @@
+# [1.4.0-beta.2](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.4.0-beta.1...v1.4.0-beta.2) (2025-12-10)
+
+
+### Features
+
+* trigger beta release ([74cce61](https://github.com/SGamrekelashvili/expo-audio-studio/commit/74cce61b74827485fb980b60ca116df304c27c24))
+
 # [1.4.0-beta.1](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.3.0...v1.4.0-beta.1) (2025-12-10)
 
 
