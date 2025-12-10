@@ -1,38 +1,64 @@
 import Foundation
 import AVFoundation
+import ExpoModulesCore
+import CoreAudio
+
+typealias AudioChunkCallback = (Any) -> Void
 
 class SharedAudioEngineManager {
     
     static let shared = SharedAudioEngineManager()
     
+    private let lock = NSRecursiveLock()
+    
     private var audioEngine: AVAudioEngine?
     private var isEngineRunning = false
     
-    private var chunkCallback: (([String: Any]) -> Void)?
+    private var chunkCallback: AudioChunkCallback?
     private var vadBufferCallback: ((AVAudioPCMBuffer, AVAudioTime) -> Void)?
     
     private var chunkEnabled = false
     private var vadEnabled = false
     
-    private let lock = NSLock()
+    private var converter: AVAudioConverter?
+    
+    private var audioChunkManager: AudioChunkManager?
+    private var currentVoiceState = false
+    
+    private var engineUsers = 0
+    
+    func updateVoiceState(_ hasVoice: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        currentVoiceState = hasVoice
+    }
     
     private let targetSampleRate: Double = 16000
-    private var converter: AVAudioConverter?
     
     private init() {}
     
     
-    func enableChunkCapture(callback: @escaping ([String: Any]) -> Void) {
+    func enableChunkCapture(callback: @escaping AudioChunkCallback) {
         lock.lock()
         defer { lock.unlock() }
         
         chunkCallback = callback
         chunkEnabled = true
+        engineUsers += 1
+        
+        if audioChunkManager == nil {
+            audioChunkManager = AudioChunkManager()
+            audioChunkManager?.startStreaming()
+        }
+        
         startEngineIfNeeded()
         
         if !isEngineRunning {
             chunkCallback = nil
             chunkEnabled = false
+            engineUsers = max(0, engineUsers - 1)
+            audioChunkManager?.stopStreaming()
+            audioChunkManager = nil
         }
     }
     
@@ -40,9 +66,18 @@ class SharedAudioEngineManager {
         lock.lock()
         defer { lock.unlock() }
         
-        chunkEnabled = false
         chunkCallback = nil
-        stopEngineIfNotNeeded()
+        chunkEnabled = false
+        engineUsers = max(0, engineUsers - 1)
+        
+        let manager = audioChunkManager
+        audioChunkManager = nil
+        
+        manager?.stopStreaming()
+        
+        if engineUsers == 0 && !vadEnabled {
+            stopEngineUnsafe()
+        }
     }
     
     func enableVADCapture(callback: @escaping (AVAudioPCMBuffer, AVAudioTime) -> Void) {
@@ -51,11 +86,14 @@ class SharedAudioEngineManager {
         
         vadBufferCallback = callback
         vadEnabled = true
+        engineUsers += 1
+        
         startEngineIfNeeded()
         
         if !isEngineRunning {
             vadBufferCallback = nil
             vadEnabled = false
+            engineUsers = max(0, engineUsers - 1)
         }
     }
     
@@ -65,7 +103,11 @@ class SharedAudioEngineManager {
         
         vadEnabled = false
         vadBufferCallback = nil
-        stopEngineIfNotNeeded()
+        engineUsers = max(0, engineUsers - 1)
+        
+        if engineUsers == 0 && !chunkEnabled {
+            stopEngineUnsafe()
+        }
     }
     
     func isActive() -> Bool {
@@ -78,11 +120,17 @@ class SharedAudioEngineManager {
         lock.lock()
         defer { lock.unlock() }
         
-        stopEngine()
         chunkEnabled = false
         vadEnabled = false
         chunkCallback = nil
         vadBufferCallback = nil
+        engineUsers = 0
+        
+        let manager = audioChunkManager
+        audioChunkManager = nil
+        
+        manager?.stopStreaming()
+        stopEngineUnsafe()
     }
     
     
@@ -92,7 +140,7 @@ class SharedAudioEngineManager {
             return
         }
         
-        guard chunkEnabled || vadEnabled else {
+        guard engineUsers > 0 else {
             print("[\(Date())] SharedAudioEngine: No consumers enabled")
             return
         }
@@ -130,23 +178,32 @@ class SharedAudioEngineManager {
             inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, time in
                 guard let self = self else { return }
                 
+                self.lock.lock()
+                let vadCallback = self.vadBufferCallback
+                let chunkCallback = self.chunkCallback
+                let shouldProcess = self.isEngineRunning
+                self.lock.unlock()
+                
+                guard shouldProcess else { return }
+                
                 guard let convertedBuffer = self.convertBuffer(buffer, converter: audioConverter, targetFormat: targetFormat) else {
                     return
                 }
-        
-                self.vadBufferCallback?(convertedBuffer, time)
                 
-                if let chunkCallback = self.chunkCallback {
-                    self.processChunk(buffer: convertedBuffer, callback: chunkCallback)
+                vadCallback?(convertedBuffer, time)
+                
+                if let callback = chunkCallback {
+                    self.processChunk(buffer: convertedBuffer, callback: callback)
                 }
             }
             
             try audioEngine.start()
             self.audioEngine = audioEngine
             self.isEngineRunning = true
+            print("[\(Date())] SharedAudioEngine: Started successfully")
             
         } catch {
-            
+            print("[\(Date())] SharedAudioEngine: Failed to start - \(error)")
             if let engineInstance = engine {
                 engineInstance.inputNode.removeTap(onBus: 0)
             }
@@ -157,26 +214,40 @@ class SharedAudioEngineManager {
     }
     
     private func stopEngineIfNotNeeded() {
-        guard !chunkEnabled && !vadEnabled else {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        guard engineUsers == 0 else {
             print("[\(Date())] SharedAudioEngine: Still has active consumers")
             return
         }
         
-        stopEngine()
+        stopEngineUnsafe()
     }
     
     private func stopEngine() {
+        lock.lock()
+        defer { lock.unlock() }
+        stopEngineUnsafe()
+    }
+    
+    private func stopEngineUnsafe() {
         guard isEngineRunning else { return }
         
-        if let engine = audioEngine {
-      
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-        }
-        audioEngine = nil
-        converter = nil
         isEngineRunning = false
         
+        if let engine = audioEngine {
+            engine.inputNode.removeTap(onBus: 0)
+           
+            if engine.isRunning {
+                engine.stop()
+            }
+        }
+        
+        audioEngine = nil
+        converter = nil
+        audioChunkManager?.stopStreaming()
+        audioChunkManager = nil
         print("[\(Date())] SharedAudioEngine: Stopped")
     }
     
@@ -204,24 +275,45 @@ class SharedAudioEngineManager {
         return outputBuffer
     }
     
-    private func processChunk(buffer: AVAudioPCMBuffer, callback: @escaping ([String: Any]) -> Void) {
-        guard let channelData = buffer.floatChannelData else { return }
-        let channelDataValue = channelData.pointee
+    private func processChunk(buffer: AVAudioPCMBuffer, callback: AudioChunkCallback) {
+        guard let channelData = buffer.floatChannelData?[0] else { return }
+        
         let frameLength = Int(buffer.frameLength)
         
-        var int16Data = [Int16](repeating: 0, count: frameLength)
-        for i in 0..<frameLength {
-            let sample = channelDataValue[i]
-            let clampedSample = max(-1.0, min(1.0, sample))
-            int16Data[i] = Int16(clampedSample * 32767.0)
-        }
-        
-        let data = Data(bytes: &int16Data, count: int16Data.count * MemoryLayout<Int16>.size)
-        
-        let base64String = data.base64EncodedString()
-        
-        DispatchQueue.main.async {
-            callback(["base64": base64String])
+        autoreleasepool {
+            var pcmData = Data(capacity: frameLength * 2)
+            for i in 0..<frameLength {
+                let sample = channelData[i]
+                let int16Sample = Int16(max(-32768, min(32767, sample * 32768)))
+                withUnsafeBytes(of: int16Sample.littleEndian) { bytes in
+                    pcmData.append(contentsOf: bytes)
+                }
+            }
+            
+            lock.lock()
+            let voiceState = currentVoiceState
+            let manager = audioChunkManager
+            lock.unlock()
+            
+            if let chunkManager = manager {
+                chunkManager.processChunk(pcmData, hasVoice: voiceState)
+                
+                let chunks = chunkManager.getAllChunks()
+                if !chunks.isEmpty {
+                    callback([
+                        "chunks": chunks,
+                        "type": "batch",
+                        "format": "uint8array"
+                    ] as [String: Any])
+                }
+            } else {
+                let byteArray = Array(pcmData)
+                callback([
+                    "data": byteArray,
+                    "type": "direct",
+                    "format": "uint8array"
+                ] as [String: Any])
+            }
         }
     }
 }

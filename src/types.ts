@@ -64,7 +64,7 @@ export type ExpoAudioStudioModuleEvents = {
   onRecorderStatusChange: (_params: AudioRecordingStateChangeEvent) => void;
   onVoiceActivityDetected: (_params: VoiceActivityEvent) => void;
   /**
-   *  returns audio chunk Base64 string
+   * Returns audio chunks as binary data
    */
   onAudioChunk: (_params: AudioChunkEvent) => void;
 };
@@ -131,11 +131,24 @@ export type VoiceActivityEvent = {
 };
 
 /**
- * Audio chunk event containing Base64 string
+ * Audio chunk event containing binary audio data
  */
 export type AudioChunkEvent = {
-  /** Base64 encoded audio chunk */
-  base64: string;
+  /** Array of audio chunks when voice is detected */
+  chunks?: Array<{
+    /** PCM audio data as integers (0-255) */
+    data: number[];
+    /** Timestamp when chunk was captured */
+    timestamp: number;
+    /** Whether VAD detected voice in this chunk */
+    hasVoice: boolean;
+    /** Size of chunk in bytes */
+    size: number;
+  }>;
+  /** Event type - 'batch' for batch processing */
+  type?: 'batch';
+  /** Data format - 'uint8array' for binary data */
+  format?: 'uint8array';
 };
 
 // Permission Types

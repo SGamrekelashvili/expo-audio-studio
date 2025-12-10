@@ -98,19 +98,9 @@ class AudioAmplitudeAnalyzer {
             )
         }
         
-        let formatDescriptions = audioTrack.formatDescriptions
-        guard let formatDescription = formatDescriptions.first else {
-            return AmplitudeResult(
-                amplitudes: [],
-                duration: duration,
-                sampleRate: 0.0,
-                success: false,
-                error: "Could not get audio format description"
-            )
-        }
+        let formatDescription = audioTrack.formatDescriptions.first as! CMAudioFormatDescription
         
-        let audioStreamBasicDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription as! CMAudioFormatDescription)
-        guard let basicDescription = audioStreamBasicDescription else {
+        guard let basicDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription) else {
             return AmplitudeResult(
                 amplitudes: [],
                 duration: duration,
@@ -119,8 +109,10 @@ class AudioAmplitudeAnalyzer {
                 error: "Could not get audio stream basic description"
             )
         }
-        
+
         let originalSampleRate = basicDescription.pointee.mSampleRate
+
+        
         print("[\(Date())] Original sample rate: \(originalSampleRate) Hz")
         
         // Process audio data

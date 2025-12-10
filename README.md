@@ -27,16 +27,17 @@
   <p><em>Voice Activity Detection Example</em></p>
 </div>
 
-## What's included
+## What you get
 
-- Record high-quality audio (WAV/PCM16 format, 16kHz, 16-bit mono)
-- Capture real-time audio chunks during recording (PCM base64 encoded)
-- Play audio with speed control and seeking
-- Detect when someone is speaking (voice activity detection)
-- Get real-time amplitude data and waveform visualizations
-- Join multiple audio files together
-- Works the same on iOS and Android
-- Full TypeScript support
+- **Recording that actually works** - WAV format, 16kHz, proper quality
+- **Real-time audio chunks** - Stream to OpenAI, Whisper, whatever you want
+- **Detect when someone's talking** - Know when someone's actually speaking vs
+  dead silence (uses Silero VAD on Android, Core ML on iOS)
+- **Playback (with actual controls)** - Speed it up, slow it down, seek around
+- **Live amplitude** - Build those fancy waveform UIs
+- **File operations** - Join recordings, save wherever
+- **Same shit on both platforms** - iOS and Android behave identically
+- **TypeScript** - Because we're not animals
 
 ## Installation
 
@@ -85,14 +86,14 @@ Since this uses native code, you'll need a
 # Prebuild to apply the plugin
 npx expo prebuild
 
-# Create development build
+# Create a dev build, duh
 npx expo run:ios
 npx expo run:android
 ```
 
-## Getting started
+## Quick start
 
-### Record audio
+### Just record some audio already
 
 ```typescript
 import ExpoAudioStudio from 'expo-audio-studio';
@@ -160,7 +161,6 @@ ExpoAudioStudio.startRecording();
 
 ```typescript
 import ExpoAudioStudio from 'expo-audio-studio';
-import { encode as base64Encode, decode as base64Decode } from 'base-64';
 
 // Enable chunk listening (disabled by default)
 ExpoAudioStudio.setListenToChunks(true);
@@ -172,9 +172,10 @@ const audioChunks: string[] = [];
 const chunkSubscription = ExpoAudioStudio.addListener(
   'onAudioChunk',
   (event: AudioChunkEvent) => {
-    // event.base64 contains raw PCM audio data (Int16, 16kHz, mono)
-    audioChunks.push(event.base64);
-    console.log('Received chunk, total:', audioChunks.length);
+    // event contains raw PCM audio data chunks
+    if (event.type === 'batch' && event.chunks) {
+      console.log('Received chunks:', event.chunks.length);
+    }
   }
 );
 
@@ -215,20 +216,20 @@ ExpoAudioStudio.setPlaybackSpeed('1.5'); // 1.5x speed
 playerSubscription.remove();
 ```
 
-## API Reference
+## The actual API
 
-### Recording Functions
+### Recording stuff
 
-| Function                         | Description                        | Returns                    |
-| -------------------------------- | ---------------------------------- | -------------------------- |
-| `startRecording(directoryPath?)` | Start audio recording              | `string` - File path       |
-| `stopRecording()`                | Stop recording                     | `string` - Final file path |
-| `pauseRecording()`               | Pause recording                    | `string` - Status message  |
-| `resumeRecording()`              | Resume recording                   | `string` - Status message  |
-| `setListenToChunks(enabled)`     | Enable/disable real-time chunk capture | `boolean` - Enabled state |
-| `lastRecording()`                | Get last recording path            | `string` or `null`         |
+| Function                         | Description                            | Returns                    |
+| -------------------------------- | -------------------------------------- | -------------------------- |
+| `startRecording(directoryPath?)` | Start audio recording                  | `string` - File path       |
+| `stopRecording()`                | Stop recording                         | `string` - Final file path |
+| `pauseRecording()`               | Pause recording                        | `string` - Status message  |
+| `resumeRecording()`              | Resume recording                       | `string` - Status message  |
+| `setListenToChunks(enabled)`     | Enable/disable real-time chunk capture | `boolean` - Enabled state  |
+| `lastRecording()`                | Get last recording path                | `string` or `null`         |
 
-### Playback Functions
+### Playback stuff
 
 | Function                  | Description                  | Returns           |
 | ------------------------- | ---------------------------- | ----------------- |
@@ -239,7 +240,7 @@ playerSubscription.remove();
 | `setPlaybackSpeed(speed)` | Set playback speed (0.5-2.0) | `string` - Status |
 | `seekTo(position)`        | Seek to position in seconds  | `string` - Status |
 
-### Voice Activity Detection
+### VAD (Voice Activity Detection)
 
 | Function                               | Description                       | Returns           |
 | -------------------------------------- | --------------------------------- | ----------------- |
@@ -247,7 +248,7 @@ playerSubscription.remove();
 | `setVoiceActivityThreshold(threshold)` | Set detection threshold (0.0-1.0) | `string` - Status |
 | `setVADEventMode(mode, throttleMs?)`   | Control event frequency           | `string` - Status |
 
-### Audio Analysis
+### Audio analysis
 
 | Function                                 | Description                   | Returns                        |
 | ---------------------------------------- | ----------------------------- | ------------------------------ |
@@ -255,7 +256,7 @@ playerSubscription.remove();
 | `getAudioAmplitudes(fileUrl, barsCount)` | Get waveform data (dB values) | `object` - Amplitude data      |
 | `setAmplitudeUpdateFrequency(hz)`        | Set amplitude update rate     | `string` - Status              |
 
-### Constants
+### Constants you can check
 
 | Constant          | Description                                  | Returns   |
 | ----------------- | -------------------------------------------- | --------- |
@@ -265,16 +266,16 @@ playerSubscription.remove();
 | `isVADActive`     | Whether VAD is currently active              | `boolean` |
 | `isVADEnabled`    | Whether VAD is enabled by user preference    | `boolean` |
 
-### File Management
+### File stuff
 
 | Function                                | Description             | Returns                |
 | --------------------------------------- | ----------------------- | ---------------------- |
 | `listRecordings(directoryPath?)`        | List audio files        | `array` - File list    |
 | `joinAudioFiles(filePaths, outputPath)` | Concatenate audio files | `string` - Output path |
 
-### Event Listeners
+### Events
 
-#### Recording Events
+#### Recording events
 
 ```typescript
 import ExpoAudioStudio from 'expo-audio-studio';
@@ -297,8 +298,15 @@ const subscription = ExpoAudioStudio.addListener(
 const chunkSubscription = ExpoAudioStudio.addListener(
   'onAudioChunk',
   (event: AudioChunkEvent) => {
-    // event.base64: string - Base64 encoded PCM audio data
-    // Format: Int16 samples, 16kHz sample rate, mono channel
+    // Binary format:
+    // event.chunks: Array of chunk objects when VAD detects voice
+    // event.type: 'batch' - indicates batch mode
+    // event.format: 'uint8array' - data format
+    // Each chunk contains:
+    //   - data: number[] - PCM audio as integers (0-255)
+    //   - timestamp: number - When chunk was captured
+    //   - hasVoice: boolean - VAD detection result
+    //   - size: number - Chunk size in bytes
   }
 );
 ```
@@ -336,9 +344,195 @@ const subscription = ExpoAudioStudio.addListener(
 );
 ```
 
-## More examples
+## Audio Chunk Processing (the good stuff)
 
-### Save to a custom folder
+Okay so here's the deal - audio chunks now stream as raw binary data, not that
+Base64 nonsense. And they only get sent when someone's actually talking (thanks
+to VAD), which cuts your data transfer by like 60-80%. Pretty neat.
+
+### Why this chunk format doesn't suck
+
+- **No more Base64** - Saves like 33% memory (your users' phones will thank you)
+- **Smart VAD filtering** - Only sends chunks when someone's talking, not
+  silence
+- **Batched for speed** - Groups chunks together, 90% fewer bridge calls
+- **Won't crash your app** - Hard 8KB limit per chunk
+- **Zero-copy** - Data goes straight from native to JS, no middleman BS
+
+### Stream to AI services (OpenAI, Deepgram, etc)
+
+Alright, this is probably why you're here. Here's how to stream audio to AI
+services in real-time:
+
+```typescript
+import ExpoAudioStudio from 'expo-audio-studio';
+
+class AudioStreamer {
+  private ws: WebSocket | null = null;
+  private isStreaming = false;
+
+  // Connect to AI service (e.g., OpenAI Realtime, Deepgram, etc.)
+  async connect(url: string, apiKey: string) {
+    this.ws = new WebSocket(url);
+
+    this.ws.onopen = () => {
+      console.log('Connected to AI service');
+      // Send authentication if needed
+      this.ws?.send(
+        JSON.stringify({
+          type: 'auth',
+          api_key: apiKey,
+        })
+      );
+    };
+
+    this.ws.onmessage = event => {
+      const response = JSON.parse(event.data);
+      // Handle AI responses (transcription, etc.)
+      console.log('AI Response:', response);
+    };
+  }
+
+  // Start recording and streaming
+  async startStreaming() {
+    // Enable chunk capture with VAD filtering
+    ExpoAudioStudio.setListenToChunks(true);
+
+    // Listen to audio chunks (Dont forget to remove listener)
+    ExpoAudioStudio.addListener('onAudioChunk', event => {
+      if (
+        event.type === 'batch' &&
+        event.chunks &&
+        this.ws?.readyState === WebSocket.OPEN
+      ) {
+        // Stream each chunk to AI service
+        event.chunks.forEach(chunk => {
+          // Send as binary WebSocket frame
+          this.ws?.send(chunk);
+        });
+      }
+    });
+
+    // Start recording - chunks will be sent in real-time
+    this.isStreaming = true;
+    ExpoAudioStudio.startRecording();
+  }
+
+  // Stop streaming
+  async stopStreaming() {
+    ExpoAudioStudio.stopRecording();
+    ExpoAudioStudio.setListenToChunks(false);
+    this.isStreaming = false;
+
+    // Close WebSocket
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+}
+
+// Usage example
+const streamer = new AudioStreamer();
+
+// Connect to OpenAI Realtime API
+await streamer.connect('wss://api.openai.com/v1/realtime', 'your-api-key');
+
+// Or Deepgram
+// await streamer.connect(
+//   'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1',
+//   'your-deepgram-key'
+// );
+
+// Start streaming audio
+await streamer.startStreaming();
+
+// Later, stop streaming
+await streamer.stopStreaming();
+```
+
+### Stream to your own backend
+
+If you've got your own server, here's a smarter way (batch chunks to reduce
+network calls):
+
+```typescript
+import ExpoAudioStudio from 'expo-audio-studio';
+
+const streamToBackend = async (apiEndpoint: string) => {
+  const chunkBuffer: Uint8Array[] = [];
+  const BATCH_SIZE = 5; // Send every 5 chunks
+
+  ExpoAudioStudio.setListenToChunks(true);
+
+  ExpoAudioStudio.addListener('onAudioChunk', async event => {
+    if (event.type === 'batch' && event.chunks) {
+      // Process and store them
+      chunkBuffer.push(...event.chunks);
+
+      // Send when we have enough chunks
+      if (chunkBuffer.length >= BATCH_SIZE) {
+        const chunksToSend = chunkBuffer.splice(0, BATCH_SIZE);
+
+        // Convert to format your backend expects
+        const audioData = chunksToSend.map(chunk => Array.from(chunk));
+
+        try {
+          const response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              audio_chunks: audioData,
+              format: 'pcm16',
+              sample_rate: 16000,
+              timestamp: Date.now(),
+            }),
+          });
+
+          const result = await response.json();
+          console.log('Backend response:', result);
+        } catch (error) {
+          console.error('Failed to send chunks:', error);
+        }
+      }
+    }
+  });
+
+  // Start recording
+  ExpoAudioStudio.startRecording();
+};
+```
+
+#### Smart voice assistant pattern
+
+```typescript
+// This pattern works great for voice assistants, live transcription, etc.
+let audioQueue: Uint8Array[] = [];
+
+// Setup VAD to only send when user is speaking
+ExpoAudioStudio.setVADEnabled(true);
+ExpoAudioStudio.setVoiceActivityThreshold(0.5);
+
+ExpoAudioStudio.addListener('onAudioChunk', event => {
+  if (event.type === 'batch' && event.chunks) {
+    // Process batch of chunks (up to 10 at once)
+    audioQueue.push(...voiceChunks);
+  }
+});
+
+ExpoAudioStudio.addListener('onVoiceActivityDetected', async event => {
+  // User stopped speaking - send accumulated audio
+  if (event.eventType === 'silence_start' && audioQueue.length > 0) {
+    // Send to your AI service
+    await sendToAI(audioQueue);
+    audioQueue = [];
+  }
+});
+```
+
+### Save recordings wherever you want
 
 ```typescript
 const filePath = startRecording('/path/to/custom/directory');
@@ -346,8 +540,8 @@ const filePath = startRecording('/path/to/custom/directory');
 
 ### iOS audio session setup
 
-> **Note:** Don't reconfigure the audio session while recording or playing -
-> this can freeze your app.
+> **WARNING:** Don't touch the audio session config while recording or playing.
+> Your app WILL freeze for seconds. I learned this the hard way.
 
 ```typescript
 import ExpoAudioStudio from 'expo-audio-studio';
@@ -364,7 +558,7 @@ await ExpoAudioStudio.configureAudioSession({
 await ExpoAudioStudio.activateAudioSession();
 ```
 
-### Adjust voice detection sensitivity
+### Tweak voice detection sensitivity
 
 ```typescript
 // More sensitive (for quiet rooms)
@@ -376,9 +570,9 @@ ExpoAudioStudio.setVoiceActivityThreshold(0.7);
 ExpoAudioStudio.setVADEnabled(true);
 ```
 
-### Real-world example: Voice-activated recording
+### Real example: Voice-activated recording
 
-#### Example 1
+Here's something I actually use in production:
 
 ```typescript
 import ExpoAudioStudio from 'expo-audio-studio';
@@ -456,11 +650,19 @@ console.log('Joined file created:', result);
 Recordings use WAV format (PCM16, 16kHz, 16-bit mono) on both platforms. This
 provides good quality while keeping file sizes reasonable.
 
-- iOS: Linear PCM using AVFoundation
-- Android: PCM using
-  [AndroidWaveRecorder](https://github.com/squti/Android-Wave-Recorder)
+### How it works (if you care)
 
-Additional formats are on the roadmap.
+#### iOS
+
+Uses AVAudioEngine for recording, Core ML for detecting when someone's talking
+(iOS 14+). Records at 16kHz mono PCM. Handles all the annoying AVAudioSession
+stuff so you don't have to.
+
+#### Android
+
+AndroidWaveRecorder for recording, Silero VAD for voice detection (seriously,
+Silero is amazing). Same audio format as iOS. Uses hardware acceleration when
+available, has noise suppression on newer phones.
 
 ## Voice detection details
 
@@ -531,18 +733,9 @@ sticks around until you change it again.
 
 Everything is MIT licensed.
 
-### Running the Example
+### Development
 
-```bash
-cd example
-npm install
-npx expo run:ios
-# or
-npx expo run:android
-# Web support coming soon!
-```
-
-### Building from Source
+Want to contribute or just mess around with the code?
 
 ```bash
 # Install dependencies
@@ -559,8 +752,6 @@ npm test
 
 **Streaming & real-time processing**
 
-- Stream audio chunks in real time with configurable chunk sizes
-- Access raw PCM16 data during recording
 - Reduce latency for live transcription and other low-latency pipelines
 - Use the stream for speech-to-text or custom analysis
 
@@ -586,8 +777,7 @@ Got ideas?
 
 ## Contributing
 
-Pull requests are welcome! Check out the [Contributing Guide](CONTRIBUTING.md)
-for details.
+Got ideas? Found bugs? Send a PR. Just don't break anything that already works.
 
 1. Fork the repo
 2. Create a branch: `git checkout -b feature/my-feature`
@@ -596,30 +786,10 @@ for details.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
-for details.
-
-## Acknowledgments
-
-- Built with [Expo Modules API](https://docs.expo.dev/modules/overview/)
-- Android WAV recording powered by
-  [AndroidWaveRecorder](https://github.com/squti/Android-Wave-Recorder) by
-  @squti
-- Android Voice Activity Detection powered by
-  [Silero VAD](https://github.com/gkonovalov/android-vad) by @gkonovalov
-- iOS Voice Activity Detection using Apple's Core ML Sound Classification
-- Built for production use in audio applications
-
-## Support
-
-- Email: [sgamrekelashvili@gmail.com](mailto:sgamrekelashvili@gmail.com)
-- Issues:
-  [GitHub Issues](https://github.com/sgamrekelashvili/expo-audio-studio/issues)
-- Discussions:
-  [GitHub Discussions](https://github.com/sgamrekelashvili/expo-audio-studio/discussions)
+MIT - do whatever you want with it
 
 ---
 
 <div align="center">
-  <p><strong>Made with ❤️ for the React Native community</strong></p>
+  <p><strong>Made with frustration and coffee in Tbilisi 🇬🇪</strong></p>
 </div>

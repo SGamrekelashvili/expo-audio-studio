@@ -49,15 +49,56 @@ public class ExpoAudioStudioModule: Module {
     private var wasPlayingBeforeInterruption: Bool = false
     private var wasRecordingBeforeInterruption: Bool = false
     
+    deinit {
+        print("[\(Date())] ExpoAudioStudioModule: deinit called")
+        performCleanup()
+    }
     
+    private func performCleanup() {
+        removeNotificationObservers()
+        
+        recorderManager.cleanup()
+        
+        _ = audioManager.stopPlayingAudio()
+        
+        SharedAudioEngineManager.shared.forceStop()
+        
+        if #available(iOS 14.0, *) {
+            if let manager = self.soundClassificationManager, manager.isVoiceActivityDetectionActive() {
+                _ = manager.stopVoiceActivityDetection()
+            }
+            self.soundClassificationManager = nil
+        }
+        
+        self.isVADEnabledFromJS = false
+        self.wasPlayingBeforeInterruption = false
+        self.wasRecordingBeforeInterruption = false
+        
+        print("[\(Date())] ExpoAudioStudioModule: Cleanup complete")
+    }
     
+    private func removeNotificationObservers() {
+        print("[\(Date())] ExpoAudioStudioModule: Removing notification observers")
+        let notificationCenter = NotificationCenter.default
+        
+        notificationCenter.removeObserver(self, name: AVAudioSession.interruptionNotification, object: nil)
+        
+        notificationCenter.removeObserver(self, name: AVAudioSession.routeChangeNotification, object: nil)
+        
+        notificationCenter.removeObserver(self, name: AVAudioSession.mediaServicesWereResetNotification, object: nil)
+        
+        notificationCenter.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
+        notificationCenter.removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
+        
+        print("[\(Date())] ExpoAudioStudioModule: All notification observers removed")
+    }
     
     @available(iOS 14.0, *)
-    private func getSoundClassificationManager() -> EnhancedSoundClassificationManager {
+    private func getSoundClassificationManager() -> EnhancedSoundClassificationManager? {
         if soundClassificationManager == nil {
             soundClassificationManager = EnhancedSoundClassificationManager()
         }
-        return soundClassificationManager!
+        return soundClassificationManager
     }
     
     private func shouldVADBeActive() -> Bool {
@@ -119,12 +160,6 @@ public class ExpoAudioStudioModule: Module {
         print("[\(Date())] Notification observers setup completed")
     }
     
-    private func removeNotificationObservers() {
-        print("[\(Date())] Removing notification observers...")
-        NotificationCenter.default.removeObserver(self, name: AVAudioSession.interruptionNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: AVAudioSession.routeChangeNotification, object: nil)
-        print("[\(Date())] Notification observers removed")
-    }
 
 
     public func definition() -> ModuleDefinition {
@@ -145,22 +180,8 @@ public class ExpoAudioStudioModule: Module {
         }
         
         OnDestroy {
-            removeNotificationObservers()
-            
-            _ = audioManager.stopPlayingAudio()
-            _ = recorderManager.stopRecording()
-            
-            SharedAudioEngineManager.shared.forceStop()
-            
-            if #available(iOS 14.0, *) {
-                  if let manager = self.soundClassificationManager, manager.isVoiceActivityDetectionActive() {
-                      _ = manager.stopVoiceActivityDetection()
-                  }
-                  self.soundClassificationManager = nil
-                  self.isVADEnabledFromJS = false
-              }
-            
-            print("[\(Date())] Cleanup complete.")
+            print("[\(Date())] ExpoAudioStudioModule: OnDestroy called")
+            performCleanup()
         }
         
         Events(
@@ -183,7 +204,6 @@ public class ExpoAudioStudioModule: Module {
             let directory: URL
             
             if let customDir = directoryPath, !customDir.isEmpty {
-                // Remove file:// prefix if present
                 let cleanPath = customDir.replacingOccurrences(of: "file://", with: "")
                 directory = URL(fileURLWithPath: cleanPath)
             } else {
@@ -373,14 +393,18 @@ public class ExpoAudioStudioModule: Module {
                 sendRecorderStatusEvent: { status in
                     self.sendRecorderStatusEvent(status: status)
                     
-                    // Auto-start VAD when recording starts if enabled
                     if status == "recording" && self.isVADEnabledFromJS {
                         if #available(iOS 14.0, *) {
                             print("[\(Date())] Auto-starting VAD because recording started and VAD is enabled")
-                            let vadResult = self.getSoundClassificationManager().startVoiceActivityDetection { [weak self] event in
-                                self?.sendVoiceActivityEvent(event)
+                           
+                            if let manager = self.getSoundClassificationManager() {
+                                let vadResult = manager.startVoiceActivityDetection { [weak self] event in
+                                    self?.sendVoiceActivityEvent(event)
+                                }
+                                print("[\(Date())] VAD auto-start result: \(vadResult)")
+                            } else {
+                                print("[\(Date())] VAD auto-start failed: Could not initialize manager")
                             }
-                            print("[\(Date())] VAD auto-start result: \(vadResult)")
                         }
                     }
                 },
@@ -398,13 +422,12 @@ public class ExpoAudioStudioModule: Module {
         Function("stopRecording") { () -> String in
             print("[\(Date())] stopRecording function called")
             
-     
-                let vadActive = self.soundClassificationManager?.isVoiceActivityDetectionActive() ?? false
-                if vadActive {
-                    print("[\(Date())] Auto-stopping VAD because recording stopped")
-                    let vadResult = self.soundClassificationManager?.stopVoiceActivityDetection() ?? "NotActive"
-                    print("[\(Date())] VAD auto-stop result: \(vadResult)")
-                }
+            let vadActive = self.soundClassificationManager?.isVoiceActivityDetectionActive() ?? false
+            if vadActive {
+                print("[\(Date())] Auto-stopping VAD because recording stopped")
+                let vadResult = self.soundClassificationManager?.stopVoiceActivityDetection() ?? "NotActive"
+                print("[\(Date())] VAD auto-stop result: \(vadResult)")
+            }
             
             let result = self.recorderManager.stopRecording()
             return result
@@ -646,8 +669,12 @@ public class ExpoAudioStudioModule: Module {
             
             if #available(iOS 14.0, *) {
                 if threshold >= 0.0 && threshold <= 1.0 {
-                    self.getSoundClassificationManager().updateThreshold(threshold)
-                    return "Success: Threshold set to \(threshold)"
+                    if let manager = self.getSoundClassificationManager() {
+                        manager.updateThreshold(threshold)
+                        return "Success: Threshold set to \(threshold)"
+                    } else {
+                        return "ManagerInitError: Could not initialize sound classification manager"
+                    }
                 } else {
                     return "InvalidThreshold: Threshold must be between 0.0 and 1.0"
                 }
@@ -664,10 +691,15 @@ public class ExpoAudioStudioModule: Module {
                     
                     let isRecording = self.recorderManager.getRecorder()?.isRecording ?? false
                     if isRecording {
-                        let result = self.getSoundClassificationManager().startVoiceActivityDetection { [weak self] event in
-                            self?.sendVoiceActivityEvent(event)
+                       
+                        if let manager = self.getSoundClassificationManager() {
+                            let result = manager.startVoiceActivityDetection { [weak self] event in
+                                self?.sendVoiceActivityEvent(event)
+                            }
+                            return "VAD enabled and started: \(result)"
+                        } else {
+                            return "VAD enabled but failed to start: Manager initialization failed"
                         }
-                        return "VAD enabled and started: \(result)"
                     } else {
                         return "VAD enabled: Will auto-start with next recording"
                     }
@@ -690,14 +722,21 @@ public class ExpoAudioStudioModule: Module {
         //"onChange", "onEveryFrame", "throttled"
         Function("setVADEventMode") { (mode: String, throttleMs: Int?) -> String in
           
-                let manager = self.getSoundClassificationManager()
+               
+                guard let manager = self.getSoundClassificationManager() else {
+                    return "ManagerInitError: Could not initialize sound classification manager"
+                }
                 manager.vadEventMode = mode
                 
                 if let throttle = throttleMs, mode == "throttled" {
                     manager.vadThrottleMs = throttle
                 }
                 
-                return "VAD event mode set to: \(mode)" + (throttleMs != nil ? " with \(throttleMs!)ms throttle" : "")
+                var result = "VAD event mode set to: \(mode)"
+                if let throttle = throttleMs {
+                    result += " with \(throttle)ms throttle"
+                }
+                return result
           
         }
         

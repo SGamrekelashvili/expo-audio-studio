@@ -13,8 +13,9 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
 
     
     func preparePlayer(path: String, sendPlayerStatusEvent: @escaping (Bool, Bool) -> Void) -> String? {
-        // Store the callback for later events
-        self.onPlayerStatusChange = sendPlayerStatusEvent
+        self.onPlayerStatusChange = { [weak self] isPlaying, isFinished in
+            sendPlayerStatusEvent(isPlaying, isFinished)
+        }
 
         do {
             print("[\(Date())] preparePlayer: Preparing audio player for path: \(path)")
@@ -69,10 +70,11 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
     }
 
     func startPlayingAudio(path: String, sendPlayerStatusEvent: @escaping (Bool, Bool) -> Void) -> String? {
-        // Check if we already have a prepared player for this path
         if let existingPlayer = self.audioPlayer, existingPlayer.url?.path == path {
             print("[\(Date())] startPlayingAudio: Using already prepared player")
-            self.onPlayerStatusChange = sendPlayerStatusEvent
+            self.onPlayerStatusChange = { [weak self] isPlaying, isFinished in
+                sendPlayerStatusEvent(isPlaying, isFinished)
+            }
             
             if existingPlayer.play() {
                 sendPlayerStatusEvent(true, false)
@@ -83,13 +85,11 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
             }
         }
         
-        // If no prepared player or different path, prepare and start
         let prepareResult = preparePlayer(path: path, sendPlayerStatusEvent: sendPlayerStatusEvent)
         if prepareResult != "prepared" {
             return prepareResult // Return prepare error
         }
         
-        // Now start the prepared player
         guard let player = self.audioPlayer else {
             sendPlayerStatusEvent(false, false)
             return "PlaybackFailedException: Player is nil after prepare"
@@ -171,17 +171,26 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
     // MARK: - PlayerDelegateProtocol
     
     func playerDidFinishPlaying(successfully: Bool) {
-        DispatchQueue.main.async { [weak self] in
-            self?.onPlayerStatusChange?(false, true)
-            self?.audioPlayer = nil // Clean up player instance
-            print("[\(Date())] Player cleanup complete.")
+        audioPlayer = nil
+        
+        let callback = self.onPlayerStatusChange
+        self.onPlayerStatusChange = nil
+        
+        if let cb = callback {
+            cb(false, true)
         }
     }
     
     func playerDecodeErrorDidOccur(error: Error?) {
-        DispatchQueue.main.async { [weak self] in
-            self?.onPlayerStatusChange?(false, false)
-            self?.audioPlayer = nil
+        audioPlayer = nil
+        
+        let callback = self.onPlayerStatusChange
+        self.onPlayerStatusChange = nil
+        
+        if let cb = callback {
+            cb(false, false)
+            self.onPlayerStatusChange?(false, false)
+            self.audioPlayer = nil
             print("[\(Date())] Player decode error cleanup complete. Error: \(String(describing: error))")
         }
     }

@@ -12,7 +12,16 @@ class AudioChunkCapture {
             return
         }
         
-        sharedEngine.enableChunkCapture(callback: callback)
+        // Wrap the callback to match expected type (Any) -> Void
+        let wrappedCallback: (Any) -> Void = { data in
+            if let chunkData = data as? [String: Any] {
+                callback(chunkData)
+            } else {
+                print("[\(Date())] AudioChunkCapture: Received unexpected data type: \(type(of: data))")
+            }
+        }
+        
+        sharedEngine.enableChunkCapture(callback: wrappedCallback)
         
         // Check if engine actually started
         if sharedEngine.isActive() {

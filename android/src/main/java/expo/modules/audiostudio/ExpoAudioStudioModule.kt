@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioManager
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -20,8 +21,13 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
 import androidx.core.content.edit
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 
 class ExpoAudioStudioModule : Module() {
+    private var lifecycleObserver: LifecycleEventObserver? = null
+    private var observerActivity: LifecycleOwner? = null
     private var audioRecorderProvider: AudioRecorderProvider? = null
     private var audioPlayerProvider: AudioPlayerProvider? = null
     private var utilProvider: UtilProvider? = null
@@ -29,6 +35,8 @@ class ExpoAudioStudioModule : Module() {
 
     private var audioManager: AudioManager? = null
     private var isVADEnabledFromJS = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var permissionRunnable: Runnable? = null
 
     private val context get() = requireNotNull(appContext.reactContext)
 
@@ -52,8 +60,17 @@ class ExpoAudioStudioModule : Module() {
                 )
             }
             val sendChunkEvent: (Map<String, Any>) -> Unit = { result ->
-                val amplitude = result["base64"] ?: -160f
-                sendEvent("onAudioChunk", bundleOf("base64" to amplitude))
+                sendEvent("onAudioChunk", Bundle().apply {
+                    result.forEach { (key, value) ->
+                        when (value) {
+                            is List<*> -> putSerializable(key, value as java.io.Serializable)
+                            is String -> putString(key, value)
+                            is Int -> putInt(key, value)
+                            is Boolean -> putBoolean(key, value)
+                            else -> putSerializable(key, value as? java.io.Serializable)
+                        }
+                    }
+                })
             }
 
             audioRecorderProvider = MediaRecorderProvider(
@@ -61,20 +78,39 @@ class ExpoAudioStudioModule : Module() {
                 sendStatusEvent,
                 sendAmplitudeEvent,
                 sendVoiceActivityEvent,
-                sendChunkEvent
+                sendChunkEvent,
+                appContext // Pass AppContext for SharedObject
             )
         }
-        return audioRecorderProvider!!
+        return audioRecorderProvider ?: throw IllegalStateException("Failed to initialize AudioRecorderProvider")
     }
 
     private fun getAudioPlayerProvider(): AudioPlayerProvider {
         if (audioPlayerProvider == null) audioPlayerProvider = MediaPlayerProvider(context)
-        return audioPlayerProvider!!
+        return audioPlayerProvider ?: throw IllegalStateException("Failed to initialize AudioPlayerProvider")
     }
 
     private fun getUtilProvider(): UtilProvider {
         if (utilProvider == null) utilProvider = AndroidUtilProvider()
-        return utilProvider!!
+        return utilProvider ?: throw IllegalStateException("Failed to initialize UtilProvider")
+    }
+    
+    private fun removeLifecycleObserver() {
+        try {
+            val observer = lifecycleObserver
+            val activity = observerActivity
+            
+            if (observer != null && activity != null) {
+                Log.d("ExpoAudioStudioModule", "Removing lifecycle observer")
+                activity.lifecycle.removeObserver(observer)
+            }
+            
+            // Clear references
+            lifecycleObserver = null
+            observerActivity = null
+        } catch (e: Exception) {
+            Log.e("ExpoAudioStudioModule", "Error removing lifecycle observer: ${e.message}")
+        }
     }
 
     override fun definition() = ModuleDefinition {
@@ -83,12 +119,66 @@ class ExpoAudioStudioModule : Module() {
 
         OnCreate {
             audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            
+            // Register lifecycle observer to prevent crashes when app goes to background
+            try {
+                val activity = appContext.currentActivity
+                if (activity != null && activity is LifecycleOwner) {
+                    lifecycleObserver = LifecycleEventObserver { _, event ->
+                        val recorderProvider = audioRecorderProvider
+                        when (event) {
+                            Lifecycle.Event.ON_PAUSE -> {
+                                // Only access provider if it's not null
+                                recorderProvider?.let { recorder ->
+                                    if (recorder.isRecording() && !recorder.isPaused()) {
+                                        recorder.pauseRecording()
+                                    }
+                                }
+                            }
+                            Lifecycle.Event.ON_STOP -> {
+                                // Only access provider if it's not null
+                                recorderProvider?.stopVoiceActivityDetection()
+                            }
+                            else -> {}
+                        }
+                    }
+                    // Store reference to activity for cleanup
+                    observerActivity = activity
+                    // Add the observer on the main thread to avoid crashes
+                    if (Looper.myLooper() == Looper.getMainLooper()) {
+                        activity.lifecycle.addObserver(lifecycleObserver!!)
+                    } else {
+                        mainHandler.post {
+                            lifecycleObserver?.let { observer ->
+                                observerActivity?.lifecycle?.addObserver(observer)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("ExpoAudioStudioModule", "Failed to register lifecycle observer: ${e.message}")
+            }
         }
 
         OnDestroy {
             try {
-                audioPlayerProvider?.let { it.stopPlaying(); it.releasePlayer() }
-                audioRecorderProvider?.let { it.stopRecording(); it.releaseRecorder() }
+                if (Looper.myLooper() == Looper.getMainLooper()) {
+                    removeLifecycleObserver()
+                } else {
+                    mainHandler.post { removeLifecycleObserver() }
+                }
+                audioPlayerProvider = null
+                
+                audioRecorderProvider?.let { 
+                    try { it.stopRecording() } catch (_: Exception) {}
+                    try { it.releaseRecorder() } catch (_: Exception) {}
+                }
+                audioRecorderProvider = null
+                
+                utilProvider = null
+                audioManager = null
+                isVADEnabledFromJS = false
+                lastRecordingOutput = ""
             } catch (e: Exception) {
                 Log.e("ExpoAudioStudioModule", "Cleanup error: ${e.message}")
             }
@@ -375,7 +465,8 @@ class ExpoAudioStudioModule : Module() {
                 val prefs = context.getSharedPreferences("expo.modules.audiostudio.permissions", Context.MODE_PRIVATE)
                 prefs.edit { putBoolean("has_asked_for_microphone", true) }
                 ActivityCompat.requestPermissions(activity, arrayOf(permission), 123)
-                Handler(Looper.getMainLooper()).postDelayed({
+                permissionRunnable?.let { mainHandler.removeCallbacks(it) }
+                permissionRunnable = Runnable {
                     try {
                         val granted = ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
                         if (granted) {
@@ -386,8 +477,11 @@ class ExpoAudioStudioModule : Module() {
                         }
                     } catch (e: Exception) {
                         promise.reject("ERR_PERMISSION", "Failed to check permission result: ${e.message}", e)
+                    } finally {
+                        permissionRunnable = null
                     }
-                }, 2500)
+                }
+                mainHandler.postDelayed(permissionRunnable!!, 2500)
             } catch (e: Exception) {
                 promise.reject("ERR_PERMISSION", "Failed to request permission: ${e.message}", e)
             }

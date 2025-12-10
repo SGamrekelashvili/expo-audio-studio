@@ -508,3 +508,4 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
 const ExpoAudioStudio = requireNativeModule<ExpoAudioStudioModule>('ExpoAudioStudio');
 
 export default ExpoAudioStudio;
+export * from './types';

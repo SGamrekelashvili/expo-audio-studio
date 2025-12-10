@@ -3,8 +3,10 @@ import AVFoundation
 
 class RecorderManager: NSObject, RecorderDelegateProtocol {
     
+    private let stateLock = NSRecursiveLock()
+    
     private var audioRecorder: AVAudioRecorder?
-    private var recordTimer: Timer?
+    private weak var recordTimer: Timer? 
     var lastRecordingOutput: URL?
     
     private var recorderDelegate: RecorderDelegate?
@@ -12,7 +14,6 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
     private var recordingStoppedCallback: (() -> Void)?
     
     private var isRecording: Bool = false
-    private var stateLock = NSLock()
     private var isCleaningUp: Bool = false
     
     // Audio chunks
@@ -43,8 +44,9 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         stateLock.lock()
         defer { stateLock.unlock() }
         
-        guard let recorder = audioRecorder, recorder.isRecording, isRecording else {
-            // If not recording, invalidate the timer
+        guard let recorder = audioRecorder,
+              recorder.isRecording,
+              isRecording else {
             print("[\(Date())] updateRecorderMeters: Recorder not valid or not recording. Invalidating timer.")
             cleanupTimer()
             return
@@ -53,6 +55,7 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         recorder.updateMeters()
         let amplitude = recorder.averagePower(forChannel: 0)
         
+        // Send amplitude update
         if let amplitudeCallback = self.amplitudeCallback {
             DispatchQueue.main.async {
                 amplitudeCallback(amplitude)
@@ -68,6 +71,28 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         defer { stateLock.unlock() }
         enableListenToChunks = enable
         return enable
+    }
+    
+    private func startChunkCapture() {
+        stateLock.lock()
+        let shouldCapture = enableListenToChunks
+        stateLock.unlock()
+        
+        guard shouldCapture else { return }
+        
+        SharedAudioEngineManager.shared.enableChunkCapture(
+            callback: { [weak self] chunkData in
+                guard let self = self else { return }
+                self.stateLock.lock()
+                let callback = self.chunkCallback
+                self.stateLock.unlock()
+                callback?(chunkData as? [String: Any] ?? [:])
+            }
+        )
+    }
+    
+    private func stopChunkCapture() {
+        SharedAudioEngineManager.shared.disableChunkCapture()
     }
     
     func setAmplitudeUpdateFrequency(_ frequencyHz: Double) {
@@ -138,11 +163,14 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
                 return "Failed to start recording."
             }
 
+            stateLock.lock()
             isRecording = true
             self.lastRecordingOutput = outputURL
+            let shouldCapture = enableListenToChunks
+            stateLock.unlock()
             
             // Start audio engine for chunk capture if enabled
-            if enableListenToChunks {
+            if shouldCapture {
                 startChunkCapture()
             }
 
@@ -150,11 +178,28 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
                 sendRecorderStatusEvent("recording")
                 
                 guard let self = self else { return }
-                let timer = Timer(timeInterval: self.amplitudeUpdateInterval, repeats: true) { [weak self] _ in
-                    self?.updateRecorderMeters()
+                
+                self.stateLock.lock()
+                // Make sure any old timer is invalidated first
+                self.recordTimer?.invalidate()
+                self.recordTimer = nil
+                
+                let interval = self.amplitudeUpdateInterval
+                self.stateLock.unlock()
+                
+                let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+                    guard let self = self else {
+                        return
+                    }
+                    self.updateRecorderMeters()
                 }
                 RunLoop.main.add(timer, forMode: .common)
+                
+                self.stateLock.lock()
                 self.recordTimer = timer
+                self.stateLock.unlock()
+                
+                print("[\(Date())] Amplitude timer started with interval: \(interval)")
             }
 
             return outputURL.absoluteString
@@ -183,10 +228,12 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         }
         
         recorder.pause()
+        
         stopChunkCapture()
         
         DispatchQueue.main.async { [weak self] in
-            self?.cleanupTimer()
+            self?.recordTimer?.invalidate()
+            self?.recordTimer = nil
             self?.statusCallback?("paused")
         }
         
@@ -205,7 +252,6 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
             return "Failed to resume recording"
         }
         
-        // Restart chunk capture if enabled
         if enableListenToChunks {
             startChunkCapture()
         }
@@ -213,19 +259,20 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             
-            self.cleanupTimer()
+            self.recordTimer?.invalidate()
+            self.recordTimer = nil
             
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                guard let self = self else { return }
-                
-                let timer = Timer(timeInterval: self.amplitudeUpdateInterval, repeats: true) { [weak self] _ in
-                    self?.updateRecorderMeters()
+            let timer = Timer(timeInterval: self.amplitudeUpdateInterval, repeats: true) { [weak self] _ in
+                guard let self = self else {
+                    return
                 }
-                RunLoop.main.add(timer, forMode: .common)
-                self.recordTimer = timer
-                
-                self.statusCallback?("recording")
+                self.updateRecorderMeters()
             }
+            RunLoop.main.add(timer, forMode: .common)
+            self.recordTimer = timer
+            
+            self.statusCallback?("recording")
+            print("[\(Date())] Amplitude timer restarted after resume")
         }
         
         return "resumed"
@@ -246,6 +293,7 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         self.lastRecordingOutput = recordingURL
         
         stopChunkCapture()
+        
         recordingStoppedCallback?()
         
         cleanupTimer()
@@ -277,7 +325,8 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
     func isPaused() -> Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
-        return audioRecorder != nil && !audioRecorder!.isRecording && isRecording
+        guard let recorder = audioRecorder else { return false }
+        return !recorder.isRecording && isRecording
     }
     
     func setRecordingStoppedCallback(_ callback: @escaping () -> Void) {
@@ -286,35 +335,20 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         recordingStoppedCallback = callback
     }
     
-    // MARK: - Chunk Capture
-    
-    private func startChunkCapture() {
-        guard let callback = chunkCallback else { return }
-        
-        if audioChunkCapture == nil {
-            audioChunkCapture = AudioChunkCapture()
-        }
-        
-        audioChunkCapture?.startCapture(callback: callback)
-    }
-    
-    private func stopChunkCapture() {
-        audioChunkCapture?.stopCapture()
-    }
     
     private func cleanupTimer() {
         if Thread.isMainThread {
-            if let timer = self.recordTimer {
-                timer.invalidate()
-                self.recordTimer = nil
-            }
+            stateLock.lock()
+            recordTimer?.invalidate()
+            recordTimer = nil
+            stateLock.unlock()
         } else {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                if let timer = self.recordTimer {
-                    timer.invalidate()
-                    self.recordTimer = nil
-                }
+                self.stateLock.lock()
+                self.recordTimer?.invalidate()
+                self.recordTimer = nil
+                self.stateLock.unlock()
             }
         }
     }
@@ -323,7 +357,6 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         guard !isCleaningUp else { return }
         isCleaningUp = true
         
-        stopChunkCapture()
         audioChunkCapture = nil
         self.audioRecorder = nil
         self.recorderDelegate = nil

@@ -9,21 +9,70 @@ class EnhancedSoundClassificationManager: NSObject {
     private var streamAnalyzer: SNAudioStreamAnalyzer?
     private var soundClassifier: SNClassifySoundRequest?
     
-    private var isAnalyzing = false
-    private var voiceActivityCallback: (([String: Any]) -> Void)?
-    
-    private var lastVoiceState: Bool = false
+    private let stateLock = NSRecursiveLock()
+    private var _isAnalyzing = false
+    private var _voiceActivityCallback: (([String: Any]) -> Void)?
+    private var _lastVoiceState: Bool = false
     
     // "onEveryFrame" | "onChange" | "throttled"
-    public var vadEventMode: String = "onEveryFrame"
-    public var vadThrottleMs: Int = 100
-    private var lastEventTime: TimeInterval = 0
+    private var _vadEventMode: String = "onEveryFrame"
+    public var vadEventMode: String {
+        get {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return _vadEventMode
+        }
+        set {
+            stateLock.lock()
+            _vadEventMode = newValue
+            stateLock.unlock()
+        }
+    }
     
-    public var voiceConfidenceThreshold: Float = 0.5
+    private var _vadThrottleMs: Int = 100
+    public var vadThrottleMs: Int {
+        get {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return _vadThrottleMs
+        }
+        set {
+            stateLock.lock()
+            _vadThrottleMs = newValue
+            stateLock.unlock()
+        }
+    }
+    
+    private var _lastEventTime: TimeInterval = 0
+    private var lastEventTime: TimeInterval {
+        get {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return _lastEventTime
+        }
+        set {
+            stateLock.lock()
+            _lastEventTime = newValue
+            stateLock.unlock()
+        }
+    }
+    
+    private var _voiceConfidenceThreshold: Float = 0.5
+    public var voiceConfidenceThreshold: Float {
+        get {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return _voiceConfidenceThreshold
+        }
+        set {
+            stateLock.lock()
+            _voiceConfidenceThreshold = newValue
+            stateLock.unlock()
+        }
+    }
     public var windowDuration: Double = 1.5
     public var overlapFactor: Float = 0.9
     
-    // Voice-related sound identifiers
     private let voiceSoundIdentifiers: Set<String> = [
         "speech", "conversation", "narration", "monologue", "singing",
         "human_voice", "male_speech", "female_speech", "child_speech",
@@ -37,11 +86,14 @@ class EnhancedSoundClassificationManager: NSObject {
     ]
     
     func startVoiceActivityDetection(callback: @escaping ([String: Any]) -> Void) -> String {
-        guard !isAnalyzing else {
+        stateLock.lock()
+        guard !_isAnalyzing else {
+            stateLock.unlock()
             return "AlreadyAnalyzing"
         }
         
-        voiceActivityCallback = callback
+        _voiceActivityCallback = callback
+        stateLock.unlock()
         
       
         return startSoundClassificationDetection()
@@ -49,15 +101,20 @@ class EnhancedSoundClassificationManager: NSObject {
     }
     
     func stopVoiceActivityDetection() -> String {
-        guard isAnalyzing else {
+        stateLock.lock()
+        guard _isAnalyzing else {
+            stateLock.unlock()
             return "NotAnalyzing"
         }
+        stateLock.unlock()
         
         return stopStandaloneDetection()
     }
     
     func isVoiceActivityDetectionActive() -> Bool {
-        return isAnalyzing
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return _isAnalyzing
     }
     
     func updateThreshold(_ threshold: Float) {
@@ -65,7 +122,11 @@ class EnhancedSoundClassificationManager: NSObject {
             print("Threshold must be between 0.0 and 1.0")
             return
         }
-        voiceConfidenceThreshold = threshold
+        
+        stateLock.lock()
+        _voiceConfidenceThreshold = threshold
+        stateLock.unlock()
+        
         print("Threshold updated to \(threshold)")
     }
     
@@ -103,7 +164,9 @@ class EnhancedSoundClassificationManager: NSObject {
                 analyzer.analyze(buffer, atAudioFramePosition: framePosition)
             }
             
-            isAnalyzing = true
+            stateLock.lock()
+            _isAnalyzing = true
+            stateLock.unlock()
             
             return "Success"
             
@@ -121,8 +184,11 @@ class EnhancedSoundClassificationManager: NSObject {
         streamAnalyzer?.removeAllRequests()
         streamAnalyzer = nil
         soundClassifier = nil
-        isAnalyzing = false
-        voiceActivityCallback = nil
+        
+        stateLock.lock()
+        _isAnalyzing = false
+        _voiceActivityCallback = nil
+        stateLock.unlock()
         
         print("Voice activity detection stopped")
         return "Success"
@@ -131,7 +197,12 @@ class EnhancedSoundClassificationManager: NSObject {
     // MARK: - Sound Classification Result Processing
     
     private func processClassificationResults(_ classificationResult: SNClassificationResult) {
-        guard let callback = voiceActivityCallback else { return }
+        stateLock.lock()
+        guard let callback = _voiceActivityCallback else {
+            stateLock.unlock()
+            return
+        }
+        stateLock.unlock()
         
         var maxVoiceConfidence: Float = 0.0
         var hasVoiceActivity = false
@@ -153,15 +224,20 @@ class EnhancedSoundClassificationManager: NSObject {
         }
         
         let currentTime = Date().timeIntervalSince1970
-        let isStateChange = hasVoiceActivity != lastVoiceState
+        stateLock.lock()
+        let isStateChange = hasVoiceActivity != _lastVoiceState
+        let currentEventMode = _vadEventMode
+        let throttleTime = _vadThrottleMs
+        let lastEventTimeValue = _lastEventTime
+        stateLock.unlock()
         
         let shouldSendEvent: Bool
-        switch vadEventMode {
+        switch currentEventMode {
         case "onChange":
             shouldSendEvent = isStateChange
         case "throttled":
-            let timeSinceLastEvent = (currentTime - lastEventTime) * 1000
-            shouldSendEvent = isStateChange || timeSinceLastEvent >= Double(vadThrottleMs)
+            let timeSinceLastEvent = (currentTime - lastEventTimeValue) * 1000
+            shouldSendEvent = isStateChange || timeSinceLastEvent >= Double(throttleTime)
         default:
             shouldSendEvent = true
         }
@@ -174,6 +250,8 @@ class EnhancedSoundClassificationManager: NSObject {
                 eventType = hasVoiceActivity ? "speech_continue" : "silence_continue"
             }
             
+            sharedEngine.updateVoiceState(hasVoiceActivity)
+            
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 
@@ -182,16 +260,21 @@ class EnhancedSoundClassificationManager: NSObject {
                     "confidence": maxVoiceConfidence,
                     "timestamp": currentTime * 1000,
                     "isStateChange": isStateChange,
-                    "previousState": self.lastVoiceState,
+                    "previousState": { self.stateLock.lock(); let prevState = self._lastVoiceState; self.stateLock.unlock(); return prevState }(),
                     "eventType": eventType
                 ]
                 
                 callback(event)
                 
                 if isStateChange {
-                    self.lastVoiceState = hasVoiceActivity
+                    self.stateLock.lock()
+                    self._lastVoiceState = hasVoiceActivity
+                    self.stateLock.unlock()
                 }
-                self.lastEventTime = currentTime
+                
+                self.stateLock.lock()
+                self._lastEventTime = currentTime
+                self.stateLock.unlock()
             }
         }
     }
@@ -207,7 +290,12 @@ extension EnhancedSoundClassificationManager: SNResultsObserving {
     
     func request(_ request: SNRequest, didFailWithError error: Error) {
         print("Sound classification request failed: \(error)")
-        DispatchQueue.main.async { [weak self] in
+        
+        stateLock.lock()
+        let callback = _voiceActivityCallback
+        stateLock.unlock()
+        
+        DispatchQueue.main.async {
             let event: [String: Any] = [
                 "isVoiceDetected": false,
                 "confidence": 0.0,
@@ -215,7 +303,7 @@ extension EnhancedSoundClassificationManager: SNResultsObserving {
                 "isStateChange": false,
                 "eventType": "silence_continue"
             ]
-            self?.voiceActivityCallback?(event)
+            callback?(event)
         }
     }
     

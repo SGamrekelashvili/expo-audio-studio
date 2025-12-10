@@ -14,17 +14,23 @@ import androidx.media3.exoplayer.ExoPlayer
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
 
     private var playbackSpeed = 1f
     private var _player: ExoPlayer? = null
     private var cachedDuration: Long = 0L
-    private var isPaused: Boolean = false
-    private var hasCompleted: Boolean = false
+    
+    private val isPaused = AtomicBoolean(false)
+    private val hasCompleted = AtomicBoolean(false)
+    private val completionDispatched = AtomicBoolean(false)
+    
     private var currentFileName: String? = null
-    private var completionDispatched = false
     private var sharedListener: Player.Listener? = null
+    
+    private val listenersLock = Any()
+    private val listeners = mutableListOf<Player.Listener>()
 
     private fun buildPlayer(): ExoPlayer {
         val player = ExoPlayer.Builder(context)
@@ -48,20 +54,26 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
                         cachedDuration = player.duration.coerceAtLeast(0L)
                     }
                     Player.STATE_ENDED -> {
-                        hasCompleted = true
-                        isPaused = false
+                        hasCompleted.set(true)
+                        isPaused.set(false)
                     }
                     else -> Unit
                 }
             }
             override fun onPlayerError(error: PlaybackException) {
                 Log.e(TAG, "Player error: ${error.errorCodeName} - ${error.message}")
-                isPaused = false
-                hasCompleted = false
-                completionDispatched = false
+                isPaused.set(false)
+                hasCompleted.set(false)
+                completionDispatched.set(false)
             }
         }
         player.addListener(sharedListener!!)
+        
+        synchronized(listenersLock) {
+            listeners.forEach { listener ->
+                player.addListener(listener)
+            }
+        }
 
         if (playbackSpeed != 1f) {
             try {
@@ -98,9 +110,9 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         AudioEndFunction: (result: Map<String, Boolean>) -> Unit
     ): Boolean {
         stopAndReleasePlayer()
-        hasCompleted = false
-        completionDispatched = false
-        isPaused = false
+        hasCompleted.set(false)
+        completionDispatched.set(false)
+        isPaused.set(false)
 
         return try {
             val player = buildPlayer().also { _player = it }
@@ -109,16 +121,21 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
             player.prepare()
             currentFileName = fileName
 
-            player.addListener(object : Player.Listener {
+            // Create a completion listener for this specific playback
+            val completionListener = object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
-                    if (state == Player.STATE_ENDED && !completionDispatched) {
-                        completionDispatched = true
+            if (state == Player.STATE_ENDED && completionDispatched.compareAndSet(false, true)) {
+                        completionDispatched.set(true)
                         AudioEndFunction(
                             mapOf("isPlaying" to false, "didJustFinish" to true)
                         )
                     }
                 }
-            })
+            }
+            synchronized(listenersLock) {
+                listeners.add(completionListener)
+            }
+            player.addListener(completionListener)
             true
         } catch (e: Exception) {
             Log.e(TAG, "preparePlayer failed: ${e.message}")
@@ -136,20 +153,20 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
             if (existing != null && currentFileName == fileName) {
                 when (existing.playbackState) {
                     Player.STATE_ENDED -> {
-                        hasCompleted = false
-                        completionDispatched = false
-                        isPaused = false
+                        hasCompleted.set(false)
+                        completionDispatched.set(false)
+                        isPaused.set(false)
                         existing.seekTo(0L)
                         existing.play()
                         true
                     }
                     Player.STATE_READY, Player.STATE_BUFFERING, Player.STATE_IDLE -> {
-                        hasCompleted = false
+                        hasCompleted.set(false)
                         existing.play()
                         true
                     }
                     else -> {
-                        hasCompleted = false
+                        hasCompleted.set(false)
                         existing.play()
                         true
                     }
@@ -157,7 +174,7 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
             } else {
                 if (!preparePlayer(fileName, AudioEndFunction)) return false
                 _player?.let { p ->
-                    hasCompleted = false
+                    hasCompleted.set(false)
                     p.play()
                     true
                 } ?: false
@@ -166,7 +183,7 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
             Log.w(TAG, "startPlaying failed, re-preparing: ${e.message}")
             if (!preparePlayer(fileName, AudioEndFunction)) return false
             _player?.let { p ->
-                hasCompleted = false
+                hasCompleted.set(false)
                 p.play()
                 true
             } ?: false
@@ -178,10 +195,10 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         return try {
             if (p.isPlaying) {
                 p.pause()
-                isPaused = true
+                isPaused.set(true)
                 true
             } else {
-                isPaused = true
+                isPaused.set(true)
                 true
             }
         } catch (e: Exception) {
@@ -195,16 +212,16 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
         return try {
             when (p.playbackState) {
                 Player.STATE_ENDED -> {
-                    hasCompleted = false
-                    completionDispatched = false
-                    isPaused = false
+                    hasCompleted.set(false)
+                    completionDispatched.set(false)
+                    isPaused.set(false)
                     p.seekTo(0L)
                     p.play()
                     true
                 }
                 else -> {
                     p.play()
-                    isPaused = false
+                    isPaused.set(false)
                     true
                 }
             }
@@ -265,16 +282,24 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
             try { stop() } catch (_: Exception) {}
             try { clearMediaItems() } catch (_: Exception) {}
             try {
-                sharedListener?.let { removeListener(it) }
+                synchronized(listenersLock) {
+                    listeners.forEach { listener ->
+                        try { removeListener(listener) } catch (_: Exception) {}
+                    }
+                    listeners.clear()
+                }
             } catch (_: Exception) {}
+            sharedListener?.let { listener ->
+                try { removeListener(listener) } catch (_: Exception) {}
+            }
             try { release() } catch (_: Exception) {}
         }
         _player = null
         currentFileName = null
         cachedDuration = 0L
-        isPaused = false
-        hasCompleted = false
-        completionDispatched = false
+        isPaused.set(false)
+        hasCompleted.set(false)
+        completionDispatched.set(false)
         sharedListener = null
     }
 
@@ -293,11 +318,11 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
 
     override fun playerStatus(): PlayerProgress {
         val p = _player
-        if (p == null || (p.duration <= 0 && !hasCompleted)) {
+        if (p == null || (p.duration <= 0 && !hasCompleted.get())) {
             return PlayerProgress(duration = 0, currentSeconds = 0, percentage = 0f)
         }
         val duration = (if (p.duration > 0) p.duration else cachedDuration).coerceAtLeast(0L)
-        val current = if (hasCompleted) duration else p.currentPosition.coerceAtLeast(0L)
+        val current = if (hasCompleted.get()) duration else p.currentPosition.coerceAtLeast(0L)
         val percentage = if (duration > 0) current.toFloat() / duration.toFloat() else 0f
         return PlayerProgress(
             duration = duration.toInt(),
@@ -307,7 +332,16 @@ class MediaPlayerProvider(private val context: Context) : AudioPlayerProvider {
     }
 
     override fun releasePlayer() {
-        stopAndReleasePlayer()
+        try {
+            stopAndReleasePlayer()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during releasePlayer: ${e.message}")
+        } finally {
+            // Ensure references are cleared even if error occurs
+            _player = null
+            listeners.clear()
+            sharedListener = null
+        }
     }
 
     companion object {
