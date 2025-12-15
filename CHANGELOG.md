@@ -1,3 +1,10 @@
+# [1.4.0-beta.3](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.4.0-beta.2...v1.4.0-beta.3) (2025-12-15)
+
+
+### Bug Fixes
+
+* **ios:** silence drop of audio recording when using VAD ([41b5755](https://github.com/SGamrekelashvili/expo-audio-studio/commit/41b57559f6937a15e5d6ba5b1ccd891d60a57db2))
+
 # [1.4.0-beta.2](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.4.0-beta.1...v1.4.0-beta.2) (2025-12-10)
 
 
