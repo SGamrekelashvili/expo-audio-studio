@@ -173,7 +173,8 @@ class SharedAudioEngineManager {
             }
             self.converter = audioConverter
             
-            let bufferSize: AVAudioFrameCount = 8192
+            let bufferSize: AVAudioFrameCount = 2048
+            var conversionFailCount = 0
             
             inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, time in
                 guard let self = self else { return }
@@ -184,11 +185,27 @@ class SharedAudioEngineManager {
                 let shouldProcess = self.isEngineRunning
                 self.lock.unlock()
                 
-                guard shouldProcess else { return }
+                guard shouldProcess else { 
+                    print("[\(Date())] SharedAudioEngine: Engine not running, skipping tap")
+                    return 
+                }
                 
                 guard let convertedBuffer = self.convertBuffer(buffer, converter: audioConverter, targetFormat: targetFormat) else {
+                    self.lock.lock()
+                    conversionFailCount += 1
+                    let failCount = conversionFailCount
+                    self.lock.unlock()
+                    
+                    if failCount >= 3 {
+                        print("[\(Date())] SharedAudioEngine: Conversion failed 3 times, stopping engine")
+                        self.stopEngine()
+                    }
                     return
                 }
+                
+                self.lock.lock()
+                conversionFailCount = 0
+                self.lock.unlock()
                 
                 vadCallback?(convertedBuffer, time)
                 

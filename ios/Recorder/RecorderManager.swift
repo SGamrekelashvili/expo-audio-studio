@@ -44,11 +44,17 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         stateLock.lock()
         defer { stateLock.unlock() }
         
+        let callback = statusCallback
         guard let recorder = audioRecorder,
               recorder.isRecording,
               isRecording else {
             print("[\(Date())] updateRecorderMeters: Recorder not valid or not recording. Invalidating timer.")
+            // Mark stopped and notify JS to avoid silent stop
+            isRecording = false
             cleanupTimer()
+            DispatchQueue.main.async {
+                callback?("error")
+            }
             return
         }
         
