@@ -1,7 +1,6 @@
 import Foundation
-import ExpoModulesCore
 
-public class AudioChunkManager: SharedObject {
+public class AudioChunkManager {
     private let chunkQueue = DispatchQueue(label: "AudioChunkQueue", attributes: .concurrent)
     private var pendingChunks = [AudioChunk]()
     
@@ -59,8 +58,7 @@ public class AudioChunkManager: SharedObject {
         let hasVoice: Bool
     }
     
-    override public init() {
-        super.init()
+    public init() {
     }
     
     public func processChunk(_ audioData: Data, hasVoice: Bool) {

@@ -390,7 +390,8 @@ public class ExpoAudioStudioModule: Module {
           
             let result = self.recorderManager.startRecording(
                 directoryPath: directoryPath,
-                sendRecorderStatusEvent: { status in
+                sendRecorderStatusEvent: { [weak self] status in
+                    guard let self = self else { return }
                     self.sendRecorderStatusEvent(status: status)
                     
                     if status == "recording" && self.isVADEnabledFromJS {
@@ -408,11 +409,11 @@ public class ExpoAudioStudioModule: Module {
                         }
                     }
                 },
-                sendAmplitudeEvent: { amplitude in
-                    self.sendAmplitudeEvent(amplitude: amplitude)
+                sendAmplitudeEvent: { [weak self] amplitude in
+                    self?.sendAmplitudeEvent(amplitude: amplitude)
                 },
-                sendChunkEvent: { chunk in
-                    self.sendAudioChunkEvent(chunk)
+                sendChunkEvent: { [weak self] chunk in
+                    self?.sendAudioChunkEvent(chunk)
                 }
             )
             

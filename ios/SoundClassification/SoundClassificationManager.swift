@@ -177,18 +177,22 @@ class EnhancedSoundClassificationManager: NSObject {
     }
     
     private func stopStandaloneDetection() -> String {
-        // Disable VAD in shared engine
-        sharedEngine.disableVADCapture()
-        
-        // Clean up analyzer
-        streamAnalyzer?.removeAllRequests()
+        stateLock.lock()
+        let analyzer = streamAnalyzer
+        let classifier = soundClassifier
         streamAnalyzer = nil
         soundClassifier = nil
-        
-        stateLock.lock()
         _isAnalyzing = false
         _voiceActivityCallback = nil
         stateLock.unlock()
+        
+        sharedEngine.disableVADCapture()
+        
+        if analyzer != nil || classifier != nil {
+            DispatchQueue.global(qos: .utility).async {
+                analyzer?.removeAllRequests()
+            }
+        }
         
         print("Voice activity detection stopped")
         return "Success"
@@ -231,15 +235,18 @@ class EnhancedSoundClassificationManager: NSObject {
         let lastEventTimeValue = _lastEventTime
         stateLock.unlock()
         
+        let timeSinceLastEvent = (currentTime - lastEventTimeValue) * 1000
+        
         let shouldSendEvent: Bool
         switch currentEventMode {
         case "onChange":
             shouldSendEvent = isStateChange
         case "throttled":
-            let timeSinceLastEvent = (currentTime - lastEventTimeValue) * 1000
             shouldSendEvent = isStateChange || timeSinceLastEvent >= Double(throttleTime)
+        case "onEveryFrame":
+            shouldSendEvent = isStateChange || timeSinceLastEvent >= 16.0
         default:
-            shouldSendEvent = true
+            shouldSendEvent = isStateChange || timeSinceLastEvent >= 16.0
         }
         
         if shouldSendEvent {
@@ -252,29 +259,28 @@ class EnhancedSoundClassificationManager: NSObject {
             
             sharedEngine.updateVoiceState(hasVoiceActivity)
             
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                
-                let event: [String: Any] = [
-                    "isVoiceDetected": hasVoiceActivity,
-                    "confidence": maxVoiceConfidence,
-                    "timestamp": currentTime * 1000,
-                    "isStateChange": isStateChange,
-                    "previousState": { self.stateLock.lock(); let prevState = self._lastVoiceState; self.stateLock.unlock(); return prevState }(),
-                    "eventType": eventType
-                ]
-                
+            // Update state immediately to prevent duplicate events
+            stateLock.lock()
+            let previousState = _lastVoiceState
+            if isStateChange {
+                _lastVoiceState = hasVoiceActivity
+            }
+            _lastEventTime = currentTime
+            stateLock.unlock()
+            
+            // Build event outside of main thread dispatch
+            let event: [String: Any] = [
+                "isVoiceDetected": hasVoiceActivity,
+                "confidence": maxVoiceConfidence,
+                "timestamp": currentTime * 1000,
+                "isStateChange": isStateChange,
+                "previousState": previousState,
+                "eventType": eventType
+            ]
+            
+            // Dispatch to main thread - callback is captured weakly via closure
+            DispatchQueue.main.async {
                 callback(event)
-                
-                if isStateChange {
-                    self.stateLock.lock()
-                    self._lastVoiceState = hasVoiceActivity
-                    self.stateLock.unlock()
-                }
-                
-                self.stateLock.lock()
-                self._lastEventTime = currentTime
-                self.stateLock.unlock()
             }
         }
     }
