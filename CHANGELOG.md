@@ -1,3 +1,10 @@
+# [1.4.0-beta.4](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.4.0-beta.3...v1.4.0-beta.4) (2025-12-16)
+
+
+### Bug Fixes
+
+* **ios:** changes that may hit memory ([7deb44e](https://github.com/SGamrekelashvili/expo-audio-studio/commit/7deb44ef0117cc9d667a614dfae6216223432c42))
+
 # [1.4.0-beta.3](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.4.0-beta.2...v1.4.0-beta.3) (2025-12-15)
 
 
