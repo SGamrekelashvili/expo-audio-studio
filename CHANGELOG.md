@@ -1,3 +1,10 @@
+# [1.4.0-beta.5](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.4.0-beta.4...v1.4.0-beta.5) (2025-12-18)
+
+
+### Features
+
+* **ios:** add recording error details and fix threading issues ([f9acc81](https://github.com/SGamrekelashvili/expo-audio-studio/commit/f9acc8159861462b1a9b688a41735138ab8220f6))
+
 # [1.4.0-beta.4](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.4.0-beta.3...v1.4.0-beta.4) (2025-12-16)
 
 
