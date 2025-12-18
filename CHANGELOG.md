@@ -1,3 +1,23 @@
+# [2.0.0-beta.1](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.4.0-beta.5...v2.0.0-beta.1) (2025-12-18)
+
+
+### Bug Fixes
+
+* **recording:** make stopRecording async to ensure file is ready before use ([44bd766](https://github.com/SGamrekelashvili/expo-audio-studio/commit/44bd766d2f414ef1ae60681665404b6a4776430f))
+
+
+### BREAKING CHANGES
+
+* **recording:** stopRecording() now returns Promise<string> instead of string
+
+- iOS: Wait for AVAudioRecorder delegate before resolving Promise
+- Android: Convert to AsyncFunction for API consistency
+- Add 0.3s delay before VAD starts to prevent audio session conflict
+- Fix first recording corruption when VAD is enabled
+- Update TypeScript types and README examples
+
+Migration: Change stopRecording() calls to await stopRecording()
+
 # [1.4.0-beta.5](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.4.0-beta.4...v1.4.0-beta.5) (2025-12-18)
 
 
