@@ -439,14 +439,23 @@ public class ExpoAudioStudioModule: Module {
                     if status == "recording" && self.isVADEnabledFromJS {
                         if #available(iOS 14.0, *) {
                             print("[\(Date())] Auto-starting VAD because recording started and VAD is enabled")
-                           
-                            if let manager = self.getSoundClassificationManager() {
-                                let vadResult = manager.startVoiceActivityDetection { [weak self] event in
-                                    self?.sendVoiceActivityEvent(event)
+                            
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                                guard let self = self else { return }
+                                
+                                guard self.recorderManager.isCurrentlyRecording() else {
+                                    print("[\(Date())] VAD auto-start cancelled: Recording already stopped")
+                                    return
                                 }
-                                print("[\(Date())] VAD auto-start result: \(vadResult)")
-                            } else {
-                                print("[\(Date())] VAD auto-start failed: Could not initialize manager")
+                                
+                                if let manager = self.getSoundClassificationManager() {
+                                    let vadResult = manager.startVoiceActivityDetection { [weak self] event in
+                                        self?.sendVoiceActivityEvent(event)
+                                    }
+                                    print("[\(Date())] VAD auto-start result: \(vadResult)")
+                                } else {
+                                    print("[\(Date())] VAD auto-start failed: Could not initialize manager")
+                                }
                             }
                         }
                     }
@@ -462,8 +471,8 @@ public class ExpoAudioStudioModule: Module {
             return result
         }
         
-        Function("stopRecording") { () -> String in
-            print("[\(Date())] stopRecording function called")
+        AsyncFunction("stopRecording") { (promise: Promise) in
+            print("[\(Date())] stopRecording function called (async)")
             
             let vadActive = self.soundClassificationManager?.isVoiceActivityDetectionActive() ?? false
             if vadActive {
@@ -472,8 +481,20 @@ public class ExpoAudioStudioModule: Module {
                 print("[\(Date())] VAD auto-stop result: \(vadResult)")
             }
             
-            let result = self.recorderManager.stopRecording()
-            return result
+            self.recorderManager.stopRecordingAsync { [weak self] result, success in
+                guard self != nil else {
+                    promise.reject("MODULE_DEALLOCATED", "Module was deallocated")
+                    return
+                }
+                
+                if success {
+                    print("[\(Date())] stopRecording completed successfully: \(result)")
+                    promise.resolve(result)
+                } else {
+                    print("[\(Date())] stopRecording failed: \(result)")
+                    promise.reject("STOP_RECORDING_FAILED", result)
+                }
+            }
         }
         
         Function("pauseRecording") { () -> String in
