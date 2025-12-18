@@ -116,7 +116,7 @@ public class AudioChunkManager {
     public func getNextChunk() -> [String: Any]? {
         var chunk: AudioChunk?
         
-        chunkQueue.sync {
+        chunkQueue.sync(flags: .barrier) {
             if !pendingChunks.isEmpty {
                 chunk = pendingChunks.removeFirst()
             }

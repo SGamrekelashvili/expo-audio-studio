@@ -144,15 +144,15 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    * const files = ['/path/to/recording1.wav', '/path/to/recording2.wav'];
    * const outputPath = '/path/to/joined_audio.wav';
    *
-   * const result = ExpoAudioStudio.joinAudioFiles(files, outputPath);
-   * if (!result.startsWith('Error:')) {
+   * try {
+   *   const result = await ExpoAudioStudio.joinAudioFiles(files, outputPath);
    *   console.log('Files joined successfully:', result);
-   * } else {
-   *   console.error('Join failed:', result);
+   * } catch (error) {
+   *   console.error('Join failed:', error);
    * }
    * ```
    */
-  joinAudioFiles(_filePaths: string[], _outputPath: string): string;
+  joinAudioFiles(_filePaths: string[], _outputPath: string): Promise<string>;
   setAmplitudeUpdateFrequency(_frequencyHz: number): string;
 
   // Playback Methods

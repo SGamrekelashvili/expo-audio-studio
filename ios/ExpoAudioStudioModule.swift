@@ -1,7 +1,6 @@
 import ExpoModulesCore
 import AVFoundation
 
-// Enum for managing audio session setup types (activate or deactivate)
 enum SessionSetupType {
     case stop
     case play
@@ -118,11 +117,16 @@ public class ExpoAudioStudioModule: Module {
         ])
     }
 
-    func sendRecorderStatusEvent(status: String) {
-        print("[\(Date())] sendRecorderStatusEvent: status=\(status)")
-        sendEvent("onRecorderStatusChange", [
-            "status": status 
-        ])
+    func sendRecorderStatusEvent(status: String, errorCode: String? = nil, errorMessage: String? = nil) {
+        print("[\(Date())] sendRecorderStatusEvent: status=\(status), errorCode=\(errorCode ?? "nil"), errorMessage=\(errorMessage ?? "nil")")
+        var event: [String: Any] = ["status": status]
+        if let code = errorCode {
+            event["errorCode"] = code
+        }
+        if let message = errorMessage {
+            event["errorMessage"] = message
+        }
+        sendEvent("onRecorderStatusChange", event)
     }
 
     private func sendAmplitudeEvent(amplitude: Float) {
@@ -157,7 +161,51 @@ public class ExpoAudioStudioModule: Module {
             object: nil
         )
         
+        // App lifecycle observers
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
+        
         print("[\(Date())] Notification observers setup completed")
+    }
+    
+    @objc private func handleAppDidEnterBackground() {
+        print("[\(Date())] App entered background")
+        
+        let isRecording = recorderManager.getRecorder()?.isRecording == true
+        let isPlaying = audioManager.getPlayer()?.isPlaying == true
+        
+        sendEvent("onAppStateChange", [
+            "state": "background",
+            "isRecording": isRecording,
+            "isPlaying": isPlaying
+        ])
+        
+        // Note: Recording will continue in background if UIBackgroundModes audio is enabled
+        // JS is resposible for deciding whether to stop/pause
+    }
+    
+    @objc private func handleAppWillEnterForeground() {
+        print("[\(Date())] App will enter foreground")
+        
+        let isRecording = recorderManager.getRecorder()?.isRecording == true
+        let isPlaying = audioManager.getPlayer()?.isPlaying == true
+        
+        sendEvent("onAppStateChange", [
+            "state": "foreground",
+            "isRecording": isRecording,
+            "isPlaying": isPlaying
+        ])
     }
     
 
@@ -189,7 +237,10 @@ public class ExpoAudioStudioModule: Module {
             "onRecorderStatusChange",
             "onRecorderAmplitude",
             "onVoiceActivityDetected",
-            "onAudioChunk"
+            "onAudioChunk",
+            "onInterruptionEnded",
+            "onRouteChange",
+            "onAppStateChange"
         )
         
         // MARK: - Recording Functions
@@ -245,11 +296,12 @@ public class ExpoAudioStudioModule: Module {
             }
         }
         
-        Function("joinAudioFiles") { (filePaths: [String], outputPath: String) -> String in
+        AsyncFunction("joinAudioFiles") { (filePaths: [String], outputPath: String, promise: Promise) in
             print("[\(Date())] Starting audio join with \(filePaths.count) files")
             
             guard filePaths.count >= 2 else {
-                return "Error: At least 2 audio files are required for joining"
+                promise.reject("JOIN_ERROR", "At least 2 audio files are required for joining")
+                return
             }
             
             var inputURLs: [URL] = []
@@ -260,7 +312,8 @@ public class ExpoAudioStudioModule: Module {
                 print("[\(Date())] Checking file \(index): \(cleanPath)")
                 
                 guard FileManager.default.fileExists(atPath: url.path) else {
-                    return "Error: Input file not found: \(cleanPath)"
+                    promise.reject("FILE_NOT_FOUND", "Input file not found: \(cleanPath)")
+                    return
                 }
                 
                 inputURLs.append(url)
@@ -281,7 +334,8 @@ public class ExpoAudioStudioModule: Module {
                 withMediaType: .audio,
                 preferredTrackID: kCMPersistentTrackID_Invalid
             ) else {
-                return "Error: Could not create composition track"
+                promise.reject("COMPOSITION_ERROR", "Could not create composition track")
+                return
             }
             
             print("[\(Date())] Created AVMutableComposition")
@@ -304,7 +358,8 @@ public class ExpoAudioStudioModule: Module {
                     print("[\(Date())] Added \(durationSeconds) seconds from file \(index)")
                 } catch {
                     print("[\(Date())] Error adding file \(index): \(error.localizedDescription)")
-                    return "Error: Failed to add file \(index) to composition"
+                    promise.reject("COMPOSITION_ERROR", "Failed to add file \(index) to composition")
+                    return
                 }
             }
             
@@ -315,16 +370,14 @@ public class ExpoAudioStudioModule: Module {
                 asset: composition,
                 presetName: AVAssetExportPresetPassthrough
             ) else {
-                return "Error: Could not create export session"
+                promise.reject("EXPORT_ERROR", "Could not create export session")
+                return
             }
             
             exportSession.outputFileType = .wav
             exportSession.outputURL = outputURL
             
             print("[\(Date())] Starting export session...")
-            
-            let semaphore = DispatchSemaphore(value: 0)
-            var exportResult: String = ""
             
             exportSession.exportAsynchronously {
                 switch exportSession.status {
@@ -335,40 +388,29 @@ public class ExpoAudioStudioModule: Module {
                         do {
                             let fileSize = try FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int64 ?? 0
                             print("[\(Date())] Output file size: \(fileSize) bytes")
-                            exportResult = outputURL.absoluteString
+                            promise.resolve(outputURL.absoluteString)
                         } catch {
                             print("[\(Date())] Error checking output file: \(error.localizedDescription)")
-                            exportResult = "Error: Could not verify output file"
+                            promise.reject("EXPORT_ERROR", "Could not verify output file")
                         }
                     } else {
-                        exportResult = "Error: Output file was not created"
+                        promise.reject("EXPORT_ERROR", "Output file was not created")
                     }
                     
                 case .failed:
                     let errorMsg = exportSession.error?.localizedDescription ?? "Unknown export error"
                     print("[\(Date())] Export failed: \(errorMsg)")
-                    exportResult = "Error: Export failed - \(errorMsg)"
+                    promise.reject("EXPORT_FAILED", "Export failed - \(errorMsg)")
                     
                 case .cancelled:
                     print("[\(Date())] Export cancelled")
-                    exportResult = "Error: Export was cancelled"
+                    promise.reject("EXPORT_CANCELLED", "Export was cancelled")
                     
                 default:
                     print("[\(Date())] Export status: \(exportSession.status.rawValue)")
-                    exportResult = "Error: Unexpected export status"
+                    promise.reject("EXPORT_ERROR", "Unexpected export status")
                 }
-                
-                semaphore.signal()
             }
-            
-            let timeoutResult = semaphore.wait(timeout: .now() + 30.0) // 30 second timeout
-            
-            if timeoutResult == .timedOut {
-                exportSession.cancelExport()
-                return "Error: Export timed out after 30 seconds"
-            }
-            
-            return exportResult
         }
         
         Function("setAmplitudeUpdateFrequency") { (frequencyHz: Double) -> String in
@@ -390,9 +432,9 @@ public class ExpoAudioStudioModule: Module {
           
             let result = self.recorderManager.startRecording(
                 directoryPath: directoryPath,
-                sendRecorderStatusEvent: { [weak self] status in
+                sendRecorderStatusEvent: { [weak self] status, errorCode, errorMessage in
                     guard let self = self else { return }
-                    self.sendRecorderStatusEvent(status: status)
+                    self.sendRecorderStatusEvent(status: status, errorCode: errorCode, errorMessage: errorMessage)
                     
                     if status == "recording" && self.isVADEnabledFromJS {
                         if #available(iOS 14.0, *) {
@@ -795,7 +837,7 @@ public class ExpoAudioStudioModule: Module {
             try AVAudioSession.sharedInstance().setActive(true, options: [.notifyOthersOnDeactivation])
             print("[\(Date())] Audio session activated successfully")
         } catch {
-            throw AudioSessionError.categorySetupFailed(error)
+            throw AudioSessionError.activationFailed(error)
         }
     }
 
@@ -934,17 +976,17 @@ public class ExpoAudioStudioModule: Module {
             guard let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else { return }
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
             
-        
-            if options.contains(.shouldResume) {
-                print("[\(Date())] Should resume after interruption")
-                if wasPlayingBeforeInterruption {
-                    _ = audioManager.resumePlayingAudio()
-                    print("[\(Date())] Resumed playback after interruption")
-                    sendPlayerStatusEvent(isPlaying: true, didJustFinish: false)
-                }
-            } else {
-                print("[\(Date())] Should NOT resume after interruption")
-            }
+            // Notify JS about interruption end - let JS decide whether to resume
+            // DO NOT auto-resume: JS controls audio session and playback state
+            let canResume = options.contains(.shouldResume)
+            print("[\(Date())] Interruption ended. canResume=\(canResume), wasPlaying=\(wasPlayingBeforeInterruption), wasRecording=\(wasRecordingBeforeInterruption)")
+            
+            // Send event to JS with all context needed for recovery decision
+            sendEvent("onInterruptionEnded", [
+                "canResume": canResume,
+                "wasPlayingBeforeInterruption": wasPlayingBeforeInterruption,
+                "wasRecordingBeforeInterruption": wasRecordingBeforeInterruption
+            ])
 
         @unknown default:
             print("[\(Date())] Unknown audio session interruption type")
@@ -976,16 +1018,23 @@ public class ExpoAudioStudioModule: Module {
         case .oldDeviceUnavailable:
             print("[\(Date())] Audio device disconnected")
             
+            // Pause playback - let JS decide whether to resume
             if audioManager.getPlayer()?.isPlaying == true {
                 print("[\(Date())] Pausing playback due to device disconnection")
                 _ = audioManager.pausePlayingAudio()
                 sendPlayerStatusEvent(isPlaying: false, didJustFinish: false)
             }
             
+            // DO NOT stop recording - iOS automatically routes to built-in mic
+            // Just notify JS about the route change so it can inform the user
             if recorderManager.getRecorder()?.isRecording == true {
-                print("[\(Date())] Stopping recording due to device disconnection")
-                _ = recorderManager.stopRecording()
-                sendRecorderStatusEvent(status: "device_disconnected")
+                print("[\(Date())] Recording continues on new route after device disconnection")
+                // Send informational event - recording continues
+                sendEvent("onRouteChange", [
+                    "reason": "deviceDisconnected",
+                    "isRecording": true,
+                    "message": "Audio device disconnected, recording continues on built-in microphone"
+                ])
             }
             
         case .categoryChange:

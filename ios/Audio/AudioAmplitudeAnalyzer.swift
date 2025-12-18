@@ -98,7 +98,17 @@ class AudioAmplitudeAnalyzer {
             )
         }
         
-        let formatDescription = audioTrack.formatDescriptions.first as! CMAudioFormatDescription
+        guard let formatDescriptionRef = audioTrack.formatDescriptions.first else {
+            return AmplitudeResult(
+                amplitudes: [],
+                duration: duration,
+                sampleRate: 0.0,
+                success: false,
+                error: "Could not get audio format description"
+            )
+        }
+        
+        let formatDescription = formatDescriptionRef as! CMAudioFormatDescription
         
         guard let basicDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription) else {
             return AmplitudeResult(
@@ -115,7 +125,6 @@ class AudioAmplitudeAnalyzer {
         
         print("[\(Date())] Original sample rate: \(originalSampleRate) Hz")
         
-        // Process audio data
         return processAudioData(asset: asset, barsCount: barsCount, duration: duration, sampleRate: originalSampleRate)
     }
     
@@ -146,7 +155,7 @@ class AudioAmplitudeAnalyzer {
             }
             
             let assetReaderOutput = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: outputSettings)
-            assetReaderOutput.alwaysCopiesSampleData = false // Optimize memory usage
+            assetReaderOutput.alwaysCopiesSampleData = false
             
             guard assetReader.canAdd(assetReaderOutput) else {
                 return AmplitudeResult(

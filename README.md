@@ -280,12 +280,52 @@ playerSubscription.remove();
 ```typescript
 import ExpoAudioStudio from 'expo-audio-studio';
 
-ExpoAudioStudio.addListener(
+const subscription = ExpoAudioStudio.addListener(
   'onRecorderStatusChange',
   (event: AudioRecordingStateChangeEvent) => {
     // event.status: 'recording' | 'stopped' | 'paused' | 'resumed' | 'error'
+    // event.errorCode?: RecordingErrorCode - Only present when status is 'error'
+    // event.errorMessage?: string - Human-readable error description
+
+    if (event.status === 'error') {
+      console.error(
+        `Recording error [${event.errorCode}]: ${event.errorMessage}`
+      );
+    }
   }
 );
+```
+
+##### Recording Error Codes
+
+When `status` is `'error'`, the event includes `errorCode` and `errorMessage`:
+
+| Error Code               | Description                                |
+| ------------------------ | ------------------------------------------ |
+| `RECORDER_STATE_ERROR`   | Unexpected recorder state during operation |
+| `RECORDER_CREATE_FAILED` | Failed to create AVAudioRecorder           |
+| `RECORDER_START_FAILED`  | `recorder.record()` returned false         |
+| `RECORDER_SETUP_ERROR`   | Exception during recording setup           |
+| `RECORDER_ENCODE_ERROR`  | Encode error during recording              |
+
+```typescript
+// Example: Handle specific error types
+ExpoAudioStudio.addListener('onRecorderStatusChange', event => {
+  if (event.status === 'error') {
+    switch (event.errorCode) {
+      case 'RECORDER_CREATE_FAILED':
+        // Microphone permission issue or hardware problem
+        Alert.alert('Recording Error', 'Could not access microphone');
+        break;
+      case 'RECORDER_ENCODE_ERROR':
+        // Storage issue or codec problem
+        Alert.alert('Recording Error', 'Failed to save recording');
+        break;
+      default:
+        Alert.alert('Recording Error', event.errorMessage || 'Unknown error');
+    }
+  }
+});
 
 const subscription = ExpoAudioStudio.addListener(
   'onRecorderAmplitude',
@@ -343,6 +383,87 @@ const subscription = ExpoAudioStudio.addListener(
   }
 );
 ```
+
+#### iOS Lifecycle Events (iOS only)
+
+These events help you handle audio session interruptions, device changes, and
+app state transitions. **Important**: The native code does NOT auto-resume or
+auto-stop - it notifies your JS code and lets you decide what to do.
+
+```typescript
+import ExpoAudioStudio from 'expo-audio-studio';
+import type {
+  InterruptionEndedEvent,
+  RouteChangeEvent,
+  AppStateChangeEvent,
+} from 'expo-audio-studio';
+
+// Called when audio interruption ends (phone call ended, Siri dismissed, etc.)
+// Native code does NOT auto-resume - you decide whether to resume
+const interruptionSub = ExpoAudioStudio.addListener(
+  'onInterruptionEnded',
+  (event: InterruptionEndedEvent) => {
+    console.log('Interruption ended');
+    console.log('Can resume:', event.canResume);
+    console.log('Was playing:', event.wasPlayingBeforeInterruption);
+    console.log('Was recording:', event.wasRecordingBeforeInterruption);
+
+    // You control recovery - native code waits for your decision
+    if (event.canResume && event.wasRecordingBeforeInterruption) {
+      // Reactivate session and resume recording
+      await ExpoAudioStudio.activateAudioSession();
+      ExpoAudioStudio.resumeRecording();
+    }
+  }
+);
+
+// Called when audio route changes (Bluetooth connect/disconnect, headphones, etc.)
+// Recording continues automatically on built-in mic when Bluetooth disconnects
+const routeSub = ExpoAudioStudio.addListener(
+  'onRouteChange',
+  (event: RouteChangeEvent) => {
+    console.log('Route changed:', event.reason);
+    console.log('Message:', event.message);
+    console.log('Still recording:', event.isRecording);
+
+    // Possible reasons: 'deviceDisconnected', 'deviceConnected', 'categoryChange', 'override', 'unknown'
+    if (event.reason === 'deviceDisconnected') {
+      // Inform user that recording continues on built-in mic
+      showToast('Bluetooth disconnected. Recording continues on phone mic.');
+    }
+  }
+);
+
+// Called when app goes to background or returns to foreground
+const stateSub = ExpoAudioStudio.addListener(
+  'onAppStateChange',
+  (event: AppStateChangeEvent) => {
+    console.log('App state:', event.state); // 'background' | 'foreground'
+    console.log('Recording active:', event.isRecording);
+    console.log('Playing active:', event.isPlaying);
+
+    if (event.state === 'background' && event.isRecording) {
+      // Recording continues in background if UIBackgroundModes audio is enabled
+      // You can decide to stop here if you don't want background recording
+    }
+  }
+);
+
+// Don't forget to cleanup
+interruptionSub.remove();
+routeSub.remove();
+stateSub.remove();
+```
+
+##### iOS Event Types
+
+| Event                 | When it fires                             | What you should do                                  |
+| --------------------- | ----------------------------------------- | --------------------------------------------------- |
+| `onInterruptionEnded` | Phone call ends, Siri dismisses           | Decide whether to resume recording/playback         |
+| `onRouteChange`       | Bluetooth disconnects, headphones plug in | Inform user, recording auto-continues on new device |
+| `onAppStateChange`    | App backgrounds/foregrounds               | Handle background recording policy                  |
+
+````
 
 ## Audio Chunk Processing (the good stuff)
 
@@ -449,7 +570,7 @@ await streamer.startStreaming();
 
 // Later, stop streaming
 await streamer.stopStreaming();
-```
+````
 
 ### Stream to your own backend
 

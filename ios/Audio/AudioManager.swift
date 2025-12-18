@@ -3,6 +3,8 @@ import AVFoundation
 
 class AudioManager: NSObject, PlayerDelegateProtocol {
     
+    private let stateLock = NSRecursiveLock()
+    
     private var audioPlayer: AVAudioPlayer?
     
     private var currentPlaybackSpeed: Float = 1.0
@@ -107,16 +109,24 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
     }
     
     func stopPlayingAudio() -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        
         guard let player = self.audioPlayer else {
             return false
         }
 
         player.stop()
         self.audioPlayer = nil
+        self.playerDelegate = nil
+        self.onPlayerStatusChange = nil
         return true
     }
     
     func pausePlayingAudio() -> String {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        
         guard let player = self.audioPlayer else {
             return "NoPlayerException"
         }
@@ -127,6 +137,9 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
     }
     
     func resumePlayingAudio() -> String {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        
         guard let player = self.audioPlayer else {
             return "NoPlayerException"
         }
@@ -141,6 +154,9 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
     }
     
     func setPlaybackSpeed(speed: Float) -> String {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        
         guard let player = self.audioPlayer else {
             currentPlaybackSpeed = speed // Store for next playback
             return "NoPlayerException"
@@ -156,6 +172,9 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
     }
     
     func seekToTime(position: TimeInterval) -> String {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        
         guard let player = self.audioPlayer else {
             return "NoPlayerException"
         }
@@ -165,33 +184,40 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
     }
     
     func getPlayer() -> AVAudioPlayer? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         return audioPlayer
     }
     
     // MARK: - PlayerDelegateProtocol
     
     func playerDidFinishPlaying(successfully: Bool) {
+        stateLock.lock()
         audioPlayer = nil
-        
         let callback = self.onPlayerStatusChange
         self.onPlayerStatusChange = nil
+        stateLock.unlock()
         
         if let cb = callback {
-            cb(false, true)
+            DispatchQueue.main.async {
+                cb(false, true)
+            }
         }
     }
     
     func playerDecodeErrorDidOccur(error: Error?) {
+        stateLock.lock()
         audioPlayer = nil
-        
         let callback = self.onPlayerStatusChange
         self.onPlayerStatusChange = nil
+        stateLock.unlock()
         
         if let cb = callback {
-            cb(false, false)
-            self.onPlayerStatusChange?(false, false)
-            self.audioPlayer = nil
-            print("[\(Date())] Player decode error cleanup complete. Error: \(String(describing: error))")
+            DispatchQueue.main.async {
+                cb(false, false)
+            }
         }
+        
+        print("[\(Date())] Player decode error cleanup complete. Error: \(String(describing: error))")
     }
 }

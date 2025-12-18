@@ -55,6 +55,41 @@ export type AudioSessionConfig = {
   options?: AudioSessionOptions;
 };
 
+export type InterruptionEndedEvent = {
+  /** Whether the app can resume audio playback */
+  canResume: boolean;
+  /** Whether audio was playing before the interruption */
+  wasPlayingBeforeInterruption: boolean;
+  /** Whether recording was active before the interruption */
+  wasRecordingBeforeInterruption: boolean;
+};
+
+/**
+ * Route change event - fired when audio devices connect/disconnect
+ * (iOS only)
+ */
+export type RouteChangeEvent = {
+  /** Reason for the route change */
+  reason: 'deviceDisconnected' | 'deviceConnected' | 'categoryChange' | 'override' | 'unknown';
+  /** Whether recording is currently active */
+  isRecording: boolean;
+  /** Human-readable message about the change */
+  message: string;
+};
+
+/**
+ * App state change event - fired on background/foreground transitions
+ * (iOS only)
+ */
+export type AppStateChangeEvent = {
+  /** Current app state */
+  state: 'background' | 'foreground';
+  /** Whether recording is currently active */
+  isRecording: boolean;
+  /** Whether playback is currently active */
+  isPlaying: boolean;
+};
+
 /**
  * Module event listeners interface
  */
@@ -67,6 +102,23 @@ export type ExpoAudioStudioModuleEvents = {
    * Returns audio chunks as binary data
    */
   onAudioChunk: (_params: AudioChunkEvent) => void;
+  /**
+   * Called when audio session interruption ends
+   * (iOS only)
+   */
+  onInterruptionEnded: (_params: InterruptionEndedEvent) => void;
+  /**
+   * Called when audio route changes (device connect/disconnect)
+   * Recording continues automatically on built-in mic when Bluetooth disconnects
+   * (iOS only)
+   */
+  onRouteChange: (_params: RouteChangeEvent) => void;
+  /**
+   * Called when app transitions between background and foreground
+   * Use this to handle recording state during app lifecycle
+   * (iOS only)
+   */
+  onAppStateChange: (_params: AppStateChangeEvent) => void;
 };
 
 /**
@@ -93,7 +145,21 @@ export type PlayerStatusChangeEvent = {
 export type AudioRecordingStateChangeEvent = {
   /** Current recording status */
   status: RecordingStatus;
+  /** Error code when status is 'error' */
+  errorCode?: RecordingErrorCode;
+  /** Human-readable error message when status is 'error' */
+  errorMessage?: string;
 };
+
+/**
+ * Recording error codes for specific error identification
+ */
+export type RecordingErrorCode =
+  | 'RECORDER_STATE_ERROR' // Unexpected recorder state during operation
+  | 'RECORDER_CREATE_FAILED' // Failed to create AVAudioRecorder
+  | 'RECORDER_START_FAILED' // recorder.record() returned false
+  | 'RECORDER_SETUP_ERROR' // Exception during recording setup
+  | 'RECORDER_ENCODE_ERROR'; // Encode error during recording
 
 /**
  * Recording status enumeration
