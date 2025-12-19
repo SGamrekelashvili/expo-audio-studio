@@ -1,3 +1,10 @@
+# [2.0.0-beta.2](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v2.0.0-beta.1...v2.0.0-beta.2) (2025-12-19)
+
+
+### Bug Fixes
+
+* revert async stopRecording changes for stability ([770f4c6](https://github.com/SGamrekelashvili/expo-audio-studio/commit/770f4c62216df0fafca6cb35a27e0f03f96ec39f))
+
 # [2.0.0-beta.1](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.4.0-beta.5...v2.0.0-beta.1) (2025-12-19)
 
 
