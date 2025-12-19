@@ -467,12 +467,11 @@ public class ExpoAudioStudioModule: Module {
                     self?.sendAudioChunkEvent(chunk)
                 }
             )
-            
             return result
         }
         
-        AsyncFunction("stopRecording") { (promise: Promise) in
-            print("[\(Date())] stopRecording function called (async)")
+        Function("stopRecording") { () -> String in
+            print("[\(Date())] stopRecording function called")
             
             let vadActive = self.soundClassificationManager?.isVoiceActivityDetectionActive() ?? false
             if vadActive {
@@ -481,20 +480,8 @@ public class ExpoAudioStudioModule: Module {
                 print("[\(Date())] VAD auto-stop result: \(vadResult)")
             }
             
-            self.recorderManager.stopRecordingAsync { [weak self] result, success in
-                guard self != nil else {
-                    promise.reject("MODULE_DEALLOCATED", "Module was deallocated")
-                    return
-                }
-                
-                if success {
-                    print("[\(Date())] stopRecording completed successfully: \(result)")
-                    promise.resolve(result)
-                } else {
-                    print("[\(Date())] stopRecording failed: \(result)")
-                    promise.reject("STOP_RECORDING_FAILED", result)
-                }
-            }
+            let result = self.recorderManager.stopRecording()
+            return result
         }
         
         Function("pauseRecording") { () -> String in
@@ -512,8 +499,8 @@ public class ExpoAudioStudioModule: Module {
         Function("preparePlayer") { (path: String) -> String in
             print("[\(Date())] preparePlayer function called with path: \(path)")
             
-            if let result = self.audioManager.preparePlayer(path: path, sendPlayerStatusEvent: { isPlaying, didJustFinish in
-                self.sendPlayerStatusEvent(isPlaying: isPlaying, didJustFinish: didJustFinish)
+            if let result = self.audioManager.preparePlayer(path: path, sendPlayerStatusEvent: { [weak self] isPlaying, didJustFinish in
+                self?.sendPlayerStatusEvent(isPlaying: isPlaying, didJustFinish: didJustFinish)
             }) {
                 return result
             } else {
@@ -524,8 +511,8 @@ public class ExpoAudioStudioModule: Module {
         Function("startPlaying") { (path: String) -> String in
             print("[\(Date())] startPlaying function called with path: \(path)")
             
-            if let result = self.audioManager.startPlayingAudio(path: path, sendPlayerStatusEvent: { isPlaying, didJustFinish in
-                self.sendPlayerStatusEvent(isPlaying: isPlaying, didJustFinish: didJustFinish)
+            if let result = self.audioManager.startPlayingAudio(path: path, sendPlayerStatusEvent: { [weak self] isPlaying, didJustFinish in
+                self?.sendPlayerStatusEvent(isPlaying: isPlaying, didJustFinish: didJustFinish)
             }) {
                 return result
             } else {

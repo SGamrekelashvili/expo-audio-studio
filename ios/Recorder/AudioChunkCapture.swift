@@ -4,7 +4,21 @@ import AVFoundation
 class AudioChunkCapture {
     
     private let sharedEngine = SharedAudioEngineManager.shared
-    private var isCapturing: Bool = false
+    private let stateLock = NSLock()
+    private var _isCapturing: Bool = false
+    
+    private var isCapturing: Bool {
+        get {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return _isCapturing
+        }
+        set {
+            stateLock.lock()
+            _isCapturing = newValue
+            stateLock.unlock()
+        }
+    }
     
     func startCapture(callback: @escaping ([String: Any]) -> Void) {
         guard !isCapturing else {

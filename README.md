@@ -118,7 +118,7 @@ const filePath = ExpoAudioStudio.startRecording();
 console.log('Recording to:', filePath);
 
 // Stop recording
-const finalPath = await ExpoAudioStudio.stopRecording();
+const finalPath = ExpoAudioStudio.stopRecording();
 console.log('Recording saved to:', finalPath);
 
 // Cleanup
@@ -183,7 +183,7 @@ const chunkSubscription = ExpoAudioStudio.addListener(
 ExpoAudioStudio.startRecording();
 
 // Later, when stopping...
-await ExpoAudioStudio.stopRecording();
+ExpoAudioStudio.stopRecording();
 
 // Process the chunks - decode, concatenate, add WAV header, etc.
 // See example/components/ChunkRecorder.tsx for full implementation
@@ -220,14 +220,14 @@ playerSubscription.remove();
 
 ### Recording stuff
 
-| Function                         | Description                            | Returns                             |
-| -------------------------------- | -------------------------------------- | ----------------------------------- |
-| `startRecording(directoryPath?)` | Start audio recording                  | `string` - File path                |
-| `stopRecording()`                | Stop recording (async)                 | `Promise<string>` - Final file path |
-| `pauseRecording()`               | Pause recording                        | `string` - Status message           |
-| `resumeRecording()`              | Resume recording                       | `string` - Status message           |
-| `setListenToChunks(enabled)`     | Enable/disable real-time chunk capture | `boolean` - Enabled state           |
-| `lastRecording()`                | Get last recording path                | `string` or `null`                  |
+| Function                         | Description                            | Returns                    |
+| -------------------------------- | -------------------------------------- | -------------------------- |
+| `startRecording(directoryPath?)` | Start audio recording                  | `string` - File path       |
+| `stopRecording()`                | Stop recording                         | `string` - Final file path |
+| `pauseRecording()`               | Pause recording                        | `string` - Status message  |
+| `resumeRecording()`              | Resume recording                       | `string` - Status message  |
+| `setListenToChunks(enabled)`     | Enable/disable real-time chunk capture | `boolean` - Enabled state  |
+| `lastRecording()`                | Get last recording path                | `string` or `null`         |
 
 ### Playback stuff
 
@@ -541,7 +541,7 @@ class AudioStreamer {
 
   // Stop streaming
   async stopStreaming() {
-    await ExpoAudioStudio.stopRecording();
+    ExpoAudioStudio.stopRecording();
     ExpoAudioStudio.setListenToChunks(false);
     this.isStreaming = false;
 

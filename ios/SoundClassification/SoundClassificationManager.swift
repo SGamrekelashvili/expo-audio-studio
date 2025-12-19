@@ -70,8 +70,34 @@ class EnhancedSoundClassificationManager: NSObject {
             stateLock.unlock()
         }
     }
-    public var windowDuration: Double = 1.5
-    public var overlapFactor: Float = 0.9
+    
+    private var _windowDuration: Double = 1.5
+    public var windowDuration: Double {
+        get {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return _windowDuration
+        }
+        set {
+            stateLock.lock()
+            _windowDuration = newValue
+            stateLock.unlock()
+        }
+    }
+    
+    private var _overlapFactor: Float = 0.9
+    public var overlapFactor: Float {
+        get {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return _overlapFactor
+        }
+        set {
+            stateLock.lock()
+            _overlapFactor = newValue
+            stateLock.unlock()
+        }
+    }
     
     private let voiceSoundIdentifiers: Set<String> = [
         "speech", "conversation", "narration", "monologue", "singing",

@@ -194,6 +194,7 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
     func playerDidFinishPlaying(successfully: Bool) {
         stateLock.lock()
         audioPlayer = nil
+        playerDelegate = nil
         let callback = self.onPlayerStatusChange
         self.onPlayerStatusChange = nil
         stateLock.unlock()
@@ -208,6 +209,7 @@ class AudioManager: NSObject, PlayerDelegateProtocol {
     func playerDecodeErrorDidOccur(error: Error?) {
         stateLock.lock()
         audioPlayer = nil
+        playerDelegate = nil
         let callback = self.onPlayerStatusChange
         self.onPlayerStatusChange = nil
         stateLock.unlock()

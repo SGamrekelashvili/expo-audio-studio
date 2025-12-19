@@ -284,7 +284,7 @@ class ExpoAudioStudioModule : Module() {
             lastRecordingOutput
         }
 
-        AsyncFunction("stopRecording") { promise: Promise ->
+        Function("stopRecording") {
             try {
                 if (getAudioRecorderProvider().isVoiceActivityDetectionActive()) {
                     getAudioRecorderProvider().stopVoiceActivityDetection()
@@ -292,13 +292,8 @@ class ExpoAudioStudioModule : Module() {
             } catch (e: Exception) {
                 Log.e("ExpoAudioStudioModule", "VAD stop failed: ${e.message}")
             }
-            
             val ok = getAudioRecorderProvider().stopRecording()
-            if (ok) {
-                promise.resolve(lastRecordingOutput)
-            } else {
-                promise.reject("STOP_RECORDING_FAILED", "NoRecorderException", null)
-            }
+            if (ok) lastRecordingOutput else "NoRecorderException"
         }
 
         Function("pauseRecording") {

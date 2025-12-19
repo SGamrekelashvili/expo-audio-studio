@@ -40,16 +40,13 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    *
    * @example
    * ```typescript
-   * try {
-   *   const filePath = await ExpoAudioStudio.stopRecording();
+   * const filePath = ExpoAudioStudio.stopRecording();
+   * if (filePath.includes('recording_')) {
    *   console.log('Recording saved to:', filePath);
-   *   await uploadFile(filePath);
-   * } catch (error) {
-   *   console.error('Failed to stop recording:', error);
    * }
    * ```
    */
-  stopRecording(): Promise<string>;
+  stopRecording(): string;
 
   /**
    * Pauses the current recording session

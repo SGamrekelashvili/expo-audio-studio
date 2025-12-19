@@ -12,7 +12,6 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
     private var recorderDelegate: RecorderDelegate?
     private var statusCallback: ((String, String?, String?) -> Void)?
     private var recordingStoppedCallback: (() -> Void)?
-    private var stopCompletionCallback: ((String, Bool) -> Void)?
     
     private var isRecording: Bool = false
     private var isCleaningUp: Bool = false
@@ -98,26 +97,20 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         return enable
     }
     
+    // MARK: - Chunk Capture
+    
     private func startChunkCapture() {
-        stateLock.lock()
-        let shouldCapture = enableListenToChunks
-        stateLock.unlock()
+        guard let callback = chunkCallback else { return }
         
-        guard shouldCapture else { return }
+        if audioChunkCapture == nil {
+            audioChunkCapture = AudioChunkCapture()
+        }
         
-        SharedAudioEngineManager.shared.enableChunkCapture(
-            callback: { [weak self] chunkData in
-                guard let self = self else { return }
-                self.stateLock.lock()
-                let callback = self.chunkCallback
-                self.stateLock.unlock()
-                callback?(chunkData as? [String: Any] ?? [:])
-            }
-        )
+        audioChunkCapture?.startCapture(callback: callback)
     }
     
     private func stopChunkCapture() {
-        SharedAudioEngineManager.shared.disableChunkCapture()
+        audioChunkCapture?.stopCapture()
     }
     
     func setAmplitudeUpdateFrequency(_ frequencyHz: Double) {
@@ -242,41 +235,6 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         return stopRecordingInternal()
     }
     
-    func stopRecordingAsync(completion: @escaping (String, Bool) -> Void) {
-        stateLock.lock()
-        
-        guard let recorder = self.audioRecorder else {
-            stateLock.unlock()
-            completion("NoRecorderException", false)
-            return
-        }
-        
-        let recordingURL = recorder.url
-        
-        isRecording = false
-        stopCompletionCallback = completion
-        
-        cleanupTimer()
-        
-        if recorder.isRecording {
-            recorder.stop()
-        } else {
-            stopCompletionCallback = nil
-            cleanupRecorderInternal()
-            stateLock.unlock()
-            completion(recordingURL.absoluteString, true)
-            return
-        }
-        
-        self.lastRecordingOutput = recordingURL
-        
-        stopChunkCapture()
-        
-        recordingStoppedCallback?()
-        
-        stateLock.unlock()
-    }
-    
     func pauseRecording() -> String {
         stateLock.lock()
         defer { stateLock.unlock() }
@@ -324,20 +282,33 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
             self.recordTimer = nil
             self.stateLock.unlock()
             
-            let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-                guard let self = self else {
+            // Delay timer restart to let recorder fully resume
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                guard let self = self else { return }
+                
+                self.stateLock.lock()
+                guard self.isRecording else {
+                    self.stateLock.unlock()
                     return
                 }
-                self.updateRecorderMeters()
+                self.stateLock.unlock()
+                
+                let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+                    guard let self = self else {
+                        return
+                    }
+                    self.updateRecorderMeters()
+                }
+                RunLoop.main.add(timer, forMode: .common)
+                
+                self.stateLock.lock()
+                self.recordTimer = timer
+                self.stateLock.unlock()
+                
+                print("[\(Date())] Amplitude timer restarted after resume")
             }
-            RunLoop.main.add(timer, forMode: .common)
-            
-            self.stateLock.lock()
-            self.recordTimer = timer
-            self.stateLock.unlock()
             
             self.statusCallback?("recording", nil, nil)
-            print("[\(Date())] Amplitude timer restarted after resume")
         }
         
         return "resumed"
@@ -350,21 +321,18 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         
         let recordingURL = recorder.url
         
-        isRecording = false
-        
-        cleanupTimer()
-        
         if recorder.isRecording {
-            recorder.stop()
-        } else {
-            cleanupRecorderInternal()
+            recorder.stop() 
         }
         
+        isRecording = false
         self.lastRecordingOutput = recordingURL
         
         stopChunkCapture()
-        
         recordingStoppedCallback?()
+        
+        cleanupTimer()
+        cleanupRecorderInternal()
         
         return recordingURL.absoluteString
     }
@@ -404,10 +372,6 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
     
     
     private func cleanupTimer() {
-        // Timer must be invalidated on main thread where it was created
-        // Use async to avoid deadlock when called from background thread while holding stateLock
-        // The improved updateRecorderMeters() now handles all states correctly, so even if
-        // the timer fires once more before cleanup, it won't send false errors
         if Thread.isMainThread {
             stateLock.lock()
             recordTimer?.invalidate()
@@ -428,12 +392,12 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
         guard !isCleaningUp else { return }
         isCleaningUp = true
         
+        stopChunkCapture()
         audioChunkCapture = nil
         self.audioRecorder = nil
         self.recorderDelegate = nil
         self.amplitudeCallback = nil
         self.chunkCallback = nil
-        self.statusCallback = nil
         
         isCleaningUp = false
     }
@@ -456,57 +420,36 @@ class RecorderManager: NSObject, RecorderDelegateProtocol {
     // MARK: - RecorderDelegateProtocol
     
     func recorderDidFinishRecording(successfully: Bool) {
-        var statusCb: ((String, String?, String?) -> Void)?
-        var completionCb: ((String, Bool) -> Void)?
-        var recordingURL: String?
+        var callback: ((String, String?, String?) -> Void)?
         
         stateLock.lock()
         isRecording = false
-        statusCb = statusCallback
-        completionCb = stopCompletionCallback
-        recordingURL = lastRecordingOutput?.absoluteString
-        stopCompletionCallback = nil
+        callback = statusCallback
         stateLock.unlock()
         
         stopChunkCapture()
         cleanupTimer()
-        cleanupRecorderInternal()
-        
-        if let completion = completionCb {
-            let url = recordingURL ?? "NoRecordingURL"
-            DispatchQueue.main.async {
-                completion(url, successfully)
-            }
-        }
         
         DispatchQueue.main.async {
-            statusCb?(successfully ? "stopped" : "failed", nil, nil)
+            callback?(successfully ? "stopped" : "failed", nil, nil)
         }
     }
     
     func recorderEncodeErrorDidOccur(error: Error?) {
-        var statusCb: ((String, String?, String?) -> Void)?
-        var completionCb: ((String, Bool) -> Void)?
+        var callback: ((String, String?, String?) -> Void)?
         let errorMessage = error?.localizedDescription ?? "Unknown encode error"
         
         stateLock.lock()
+
         isRecording = false
-        statusCb = statusCallback
-        completionCb = stopCompletionCallback
-        stopCompletionCallback = nil
+        callback = statusCallback
         stateLock.unlock()
         
         cleanupTimer()
         cleanupRecorderInternal()
         
-        if let completion = completionCb {
-            DispatchQueue.main.async {
-                completion("RECORDER_ENCODE_ERROR: \(errorMessage)", false)
-            }
-        }
-        
         DispatchQueue.main.async {
-            statusCb?("error", "RECORDER_ENCODE_ERROR", errorMessage)
+            callback?("error", "RECORDER_ENCODE_ERROR", errorMessage)
         }
         
         print("[\(Date())] Recorder encode error: \(errorMessage)")
