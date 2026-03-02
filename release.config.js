@@ -4,8 +4,8 @@ module.exports = {
   branches: [
     'main',
     {
-      name: 'beta',
-      prerelease: true,
+      name: 'RC',
+      prerelease: 'rc',
     },
   ],
   plugins: [
@@ -20,7 +20,7 @@ module.exports = {
     [
       '@semantic-release/npm',
       {
-        npmPublish: true,
+        npmPublish: false,
       },
     ],
     [

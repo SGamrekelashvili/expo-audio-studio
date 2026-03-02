@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioManager
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -60,17 +59,14 @@ class ExpoAudioStudioModule : Module() {
                 )
             }
             val sendChunkEvent: (Map<String, Any>) -> Unit = { result ->
-                sendEvent("onAudioChunk", Bundle().apply {
-                    result.forEach { (key, value) ->
-                        when (value) {
-                            is List<*> -> putSerializable(key, value as java.io.Serializable)
-                            is String -> putString(key, value)
-                            is Int -> putInt(key, value)
-                            is Boolean -> putBoolean(key, value)
-                            else -> putSerializable(key, value as? java.io.Serializable)
-                        }
-                    }
-                })
+                sendEvent("onAudioChunk", bundleOf(
+                    "data" to (result["data"] as? String ?: ""),
+                    "timestamp" to (result["timestamp"] as? Long ?: 0L),
+                    "endTimestamp" to (result["endTimestamp"] as? Long ?: 0L),
+                    "hasVoice" to (result["hasVoice"] as? Boolean ?: false),
+                    "size" to (result["size"] as? Int ?: 0),
+                    "encoding" to (result["encoding"] as? String ?: "base64")
+                ))
             }
 
             audioRecorderProvider = MediaRecorderProvider(
@@ -166,6 +162,9 @@ class ExpoAudioStudioModule : Module() {
                     removeLifecycleObserver()
                 } else {
                     mainHandler.post { removeLifecycleObserver() }
+                }
+                audioPlayerProvider?.let {
+                    try { it.releasePlayer() } catch (_: Exception) {}
                 }
                 audioPlayerProvider = null
                 
@@ -316,11 +315,11 @@ class ExpoAudioStudioModule : Module() {
             if (lastRecordingOutput.isNotBlank() && File(lastRecordingOutput).exists()) lastRecordingOutput else null
         }
 
-        Function("listRecordings") { directoryPath: String? ->
+        AsyncFunction("listRecordings") { directoryPath: String?, promise: Promise ->
             try {
                 val dir = if (!directoryPath.isNullOrEmpty()) File(directoryPath.replace("file://", "")) else context.cacheDir
-                if (!dir.exists()) return@Function emptyList()
-                dir.listFiles { f -> f.isFile && f.extension.lowercase() in listOf("wav", "mp3", "m4a", "aac") }
+                if (!dir.exists()) { promise.resolve(emptyList<Any>()); return@AsyncFunction }
+                val results = dir.listFiles { f -> f.isFile && f.extension.lowercase() in listOf("wav", "mp3", "m4a", "aac") }
                     ?.map { f ->
                         mapOf(
                             "path" to f.absolutePath,
@@ -332,15 +331,16 @@ class ExpoAudioStudioModule : Module() {
                             }.getOrElse { 0.0 }
                         )
                     } ?: emptyList()
+                promise.resolve(results)
             } catch (e: Exception) {
                 Log.e("ExpoAudioStudioModule", "listRecordings error: ${e.message}")
-                emptyList()
+                promise.resolve(emptyList<Any>())
             }
         }
 
-        Function("joinAudioFiles") { filePaths: List<String>, outputPath: String ->
+        AsyncFunction("joinAudioFiles") { filePaths: List<String>, outputPath: String, promise: Promise ->
             try {
-                if (filePaths.size < 2) return@Function "Error: At least 2 audio files are required"
+                if (filePaths.size < 2) { promise.resolve("Error: At least 2 audio files are required"); return@AsyncFunction }
                 val inputs = filePaths.map { File(it.replace("file://", "")) }.onEach {
                     if (!it.exists()) throw IllegalArgumentException("Input not found: ${it.absolutePath}")
                     if (!it.name.lowercase().endsWith(".wav")) throw IllegalArgumentException("Only WAV supported: ${it.name}")
@@ -348,30 +348,37 @@ class ExpoAudioStudioModule : Module() {
 
                 val out = File(outputPath.replace("file://", "")).apply { parentFile?.mkdirs(); if (exists()) delete() }
 
-                val first = inputs.first().readBytes()
-                if (first.size < 44) return@Function "Error: Invalid WAV header"
-                val riff = String(first.sliceArray(0..3))
-                val wave = String(first.sliceArray(8..11))
-                if (riff != "RIFF" || wave != "WAVE") return@Function "Error: Invalid WAV file"
+                val headerBytes = ByteArray(44)
+                java.io.BufferedInputStream(java.io.FileInputStream(inputs.first())).use { bis ->
+                    val read = bis.read(headerBytes)
+                    if (read < 44) { promise.resolve("Error: Invalid WAV header"); return@AsyncFunction }
+                }
+                val riff = String(headerBytes.sliceArray(0..3))
+                val wave = String(headerBytes.sliceArray(8..11))
+                if (riff != "RIFF" || wave != "WAVE") { promise.resolve("Error: Invalid WAV file"); return@AsyncFunction }
 
                 var totalAudioBytes = 0L
                 out.outputStream().buffered().use { os ->
-                    os.write(first, 0, 44)
+                    os.write(headerBytes)
                     inputs.forEach { f ->
-                        val bytes = f.readBytes()
-                        if (bytes.size >= 44) {
-                            val size = bytes.size - 44
-                            os.write(bytes, 44, size)
-                            totalAudioBytes += size
+                        java.io.BufferedInputStream(java.io.FileInputStream(f)).use { bis ->
+                            val dataOffset = findWavDataOffset(bis)
+                            if (dataOffset < 0) return@forEach
+                            val buf = ByteArray(8192)
+                            var read: Int
+                            while (bis.read(buf).also { read = it } > 0) {
+                                os.write(buf, 0, read)
+                                totalAudioBytes += read
+                            }
                         }
                     }
                     os.flush()
                 }
                 updateWavHeader(out, totalAudioBytes)
-                out.absolutePath
+                promise.resolve(out.absolutePath)
             } catch (e: Exception) {
                 Log.e("ExpoAudioStudioModule", "joinAudioFiles error", e)
-                "Error: ${e.message}"
+                promise.resolve("Error: ${e.message}")
             }
         }
 
@@ -426,29 +433,29 @@ class ExpoAudioStudioModule : Module() {
             runCatching { getAudioPlayerProvider().getAudioDuration(uri).toDouble() / 1000.0 }.getOrElse { 0.0 }
         }
 
-        Function("getAudioAmplitudes") { fileUrl: String, barsCount: Int ->
-            runCatching {
+        AsyncFunction("getAudioAmplitudes") { fileUrl: String, barsCount: Int, promise: Promise ->
+            try {
                 val r = AudioAmplitudeAnalyzer.getAudioAmplitudes(context, fileUrl, barsCount)
                 if (r.success) {
-                    mapOf(
+                    promise.resolve(mapOf(
                         "success" to true,
                         "amplitudes" to r.amplitudes.toList(),
                         "duration" to r.duration,
                         "sampleRate" to r.sampleRate,
                         "barsCount" to r.amplitudes.size
-                    )
+                    ))
                 } else {
-                    mapOf(
+                    promise.resolve(mapOf(
                         "success" to false,
                         "error" to (r.error ?: "Unknown error"),
                         "amplitudes" to emptyList<Float>(),
                         "duration" to r.duration,
                         "sampleRate" to r.sampleRate
-                    )
+                    ))
                 }
-            }.getOrElse {
-                Log.e("ExpoAudioStudioModule", "getAudioAmplitudes error", it)
-                mapOf("success" to false, "error" to "Error: ${it.message}", "amplitudes" to emptyList<Float>(), "duration" to 0.0, "sampleRate" to 0.0)
+            } catch (e: Exception) {
+                Log.e("ExpoAudioStudioModule", "getAudioAmplitudes error", e)
+                promise.resolve(mapOf("success" to false, "error" to "Error: ${e.message}", "amplitudes" to emptyList<Float>(), "duration" to 0.0, "sampleRate" to 0.0))
             }
         }
 
@@ -465,23 +472,43 @@ class ExpoAudioStudioModule : Module() {
                 val prefs = context.getSharedPreferences("expo.modules.audiostudio.permissions", Context.MODE_PRIVATE)
                 prefs.edit { putBoolean("has_asked_for_microphone", true) }
                 ActivityCompat.requestPermissions(activity, arrayOf(permission), 123)
+
                 permissionRunnable?.let { mainHandler.removeCallbacks(it) }
-                permissionRunnable = Runnable {
-                    try {
-                        val granted = ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-                        if (granted) {
-                            promise.resolve(mapOf("status" to "granted", "canAskAgain" to true, "granted" to true))
-                        } else {
-                            val canAskAgain = ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
-                            promise.resolve(mapOf("status" to "denied", "canAskAgain" to canAskAgain, "granted" to false))
+
+                var pollCount = 0
+                val maxPolls = 60
+                val pollIntervalMs = 500L
+                val initialPermissionState = ContextCompat.checkSelfPermission(context, permission)
+                var resolved = false
+
+                val pollRunnable = object : Runnable {
+                    override fun run() {
+                        if (resolved) return
+                        pollCount++
+                        try {
+                            val currentState = ContextCompat.checkSelfPermission(context, permission)
+                            if (currentState == PackageManager.PERMISSION_GRANTED) {
+                                resolved = true
+                                promise.resolve(mapOf("status" to "granted", "canAskAgain" to true, "granted" to true))
+                                return
+                            }
+                            if (currentState != initialPermissionState || pollCount >= maxPolls) {
+                                resolved = true
+                                val canAskAgain = ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
+                                promise.resolve(mapOf("status" to "denied", "canAskAgain" to canAskAgain, "granted" to false))
+                                return
+                            }
+                            mainHandler.postDelayed(this, pollIntervalMs)
+                        } catch (e: Exception) {
+                            if (!resolved) {
+                                resolved = true
+                                promise.reject("ERR_PERMISSION", "Failed to check permission result: ${e.message}", e)
+                            }
                         }
-                    } catch (e: Exception) {
-                        promise.reject("ERR_PERMISSION", "Failed to check permission result: ${e.message}", e)
-                    } finally {
-                        permissionRunnable = null
                     }
                 }
-                mainHandler.postDelayed(permissionRunnable!!, 2500)
+                permissionRunnable = pollRunnable
+                mainHandler.postDelayed(pollRunnable, pollIntervalMs)
             } catch (e: Exception) {
                 promise.reject("ERR_PERMISSION", "Failed to request permission: ${e.message}", e)
             }
@@ -508,12 +535,39 @@ class ExpoAudioStudioModule : Module() {
         }
     }
 
+    /**
+     * Scans a WAV input stream past RIFF/WAVE header chunks to find the "data" chunk,
+     * leaving the stream positioned at the start of the audio data.
+     * Returns the data chunk size, or -1 if not found.
+     */
+    private fun findWavDataOffset(input: java.io.InputStream): Int {
+        val header = ByteArray(12)
+        if (input.read(header) < 12) return -1
+        if (String(header, 0, 4) != "RIFF" || String(header, 8, 4) != "WAVE") return -1
+
+        val chunkHeader = ByteArray(8)
+        while (true) {
+            if (input.read(chunkHeader) < 8) return -1
+            val chunkId = String(chunkHeader, 0, 4)
+            val chunkSize = java.nio.ByteBuffer.wrap(chunkHeader, 4, 4)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN).int
+            if (chunkId == "data") return chunkSize
+            var remaining = chunkSize.toLong()
+            while (remaining > 0) {
+                val skipped = input.skip(remaining)
+                if (skipped <= 0) { input.read(); remaining -= 1 }
+                else remaining -= skipped
+            }
+        }
+    }
+
     private fun updateWavHeader(file: File, dataSize: Long) {
+        var raf: java.io.RandomAccessFile? = null
         try {
-            val raf = java.io.RandomAccessFile(file, "rw")
+            raf = java.io.RandomAccessFile(file, "rw")
             raf.seek(0)
             val riffBytes = ByteArray(4); raf.read(riffBytes)
-            if (String(riffBytes) != "RIFF") { raf.close(); return }
+            if (String(riffBytes) != "RIFF") return
             val totalFileSize = dataSize + 36
             raf.seek(4); raf.writeInt(Integer.reverseBytes(totalFileSize.toInt()))
             raf.seek(12)
@@ -526,9 +580,10 @@ class ExpoAudioStudioModule : Module() {
                 raf.seek(raf.filePointer + size)
             }
             if (dataPos != -1L) { raf.seek(dataPos); raf.writeInt(Integer.reverseBytes(dataSize.toInt())) }
-            raf.close()
         } catch (e: Exception) {
             Log.e("ExpoAudioStudioModule", "updateWavHeader error: ${e.message}", e)
+        } finally {
+            try { raf?.close() } catch (_: Exception) {}
         }
     }
 }

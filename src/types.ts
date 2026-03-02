@@ -197,10 +197,24 @@ export type VoiceActivityEvent = {
 };
 
 /**
- * Audio chunk event containing binary audio data
+ * Audio chunk event containing binary audio data.
+ * On Android, data is Base64-encoded PCM for efficiency.
+ * On iOS, data may use the legacy chunks array format.
  */
 export type AudioChunkEvent = {
-  /** Array of audio chunks when voice is detected */
+  /** Base64-encoded PCM audio data (Android) */
+  data?: string;
+  /** Timestamp of the first sample in the batch */
+  timestamp?: number;
+  /** Timestamp of the last sample in the batch */
+  endTimestamp?: number;
+  /** Whether VAD detected voice in this batch */
+  hasVoice?: boolean;
+  /** Size of decoded audio data in bytes */
+  size?: number;
+  /** Encoding format of the data field */
+  encoding?: 'base64';
+  /** Legacy: Array of audio chunks (iOS) */
   chunks?: Array<{
     /** PCM audio data as integers (0-255) */
     data: number[];
@@ -213,7 +227,7 @@ export type AudioChunkEvent = {
   }>;
   /** Event type - 'batch' for batch processing */
   type?: 'batch';
-  /** Data format - 'uint8array' for binary data */
+  /** Data format - 'uint8array' for binary data (iOS legacy) */
   format?: 'uint8array';
 };
 

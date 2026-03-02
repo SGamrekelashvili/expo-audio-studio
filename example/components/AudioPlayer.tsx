@@ -73,7 +73,7 @@ export default function AudioPlayer() {
 
   const loadRecordings = useCallback(async () => {
     try {
-      const files = ExpoAudioStudio.listRecordings();
+      const files = await ExpoAudioStudio.listRecordings();
       
       const recordings: AudioRecording[] = files.map((file) => {
         return {

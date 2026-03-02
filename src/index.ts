@@ -114,23 +114,25 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    * @example
    * ```typescript
    * // List recordings in default directory
-   * const recordings = ExpoAudioStudio.listRecordings();
+   * const recordings = await ExpoAudioStudio.listRecordings();
    *
    * // List recordings in custom directory
-   * const customRecordings = ExpoAudioStudio.listRecordings('/path/to/custom/dir/');
+   * const customRecordings = await ExpoAudioStudio.listRecordings('/path/to/custom/dir/');
    *
    * recordings.forEach(file => {
    *   console.log(`File: ${file.name}, Size: ${file.size}, Duration: ${file.duration}s`);
    * });
    * ```
    */
-  listRecordings(_directoryPath?: string): Array<{
-    path: string;
-    name: string;
-    size: number;
-    lastModified: number;
-    duration: number;
-  }>;
+  listRecordings(_directoryPath?: string): Promise<
+    Array<{
+      path: string;
+      name: string;
+      size: number;
+      lastModified: number;
+      duration: number;
+    }>
+  >;
 
   /**
    * Joins multiple audio files into a single file
@@ -347,7 +349,7 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    *
    * @example
    * ```typescript
-   * const result = ExpoAudioStudio.getAudioAmplitudes('/path/to/audio.wav', 64);
+   * const result = await ExpoAudioStudio.getAudioAmplitudes('/path/to/audio.wav', 64);
    * if (result.success) {
    *   console.log(`Generated ${result.barsCount} bars for ${result.duration}s audio`);
    *   // Use result.amplitudes array (dB values) for visualization
@@ -357,7 +359,7 @@ declare class ExpoAudioStudioModule extends NativeModule<ExpoAudioStudioModuleEv
    * }
    * ```
    */
-  getAudioAmplitudes(_fileUrl: string, _barsCount: number): AudioAmplitudeResult;
+  getAudioAmplitudes(_fileUrl: string, _barsCount: number): Promise<AudioAmplitudeResult>;
 
   // Voice Activity Detection
 

@@ -92,7 +92,20 @@ const ChunkRecorder = () => {
   useEffect(() => {
     ExpoAudioStudio.setListenToChunks(true)
     ExpoAudioStudio.addListener('onAudioChunk', (chunk: AudioChunkEvent) => {
-      // New API: batch of Uint8Array-friendly data
+      // Android: Base64-encoded batch
+      if (chunk?.encoding === 'base64' && typeof chunk.data === 'string' && chunk.data.length > 0) {
+        const binary = atob(chunk.data)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i)
+        }
+        if (bytes.length > 0) {
+          chunkRef.current = [...chunkRef.current, bytes]
+        }
+        return
+      }
+
+      // iOS legacy: batch of Uint8Array-friendly data
       if (chunk?.type === 'batch' && chunk?.format === 'uint8array' && Array.isArray(chunk?.chunks)) {
         const next: Uint8Array[] = []
         for (const item of chunk.chunks) {
@@ -100,13 +113,11 @@ const ChunkRecorder = () => {
             next.push(new Uint8Array(item.data))
           }
         }
-
         if (next.length) {
           chunkRef.current = [...chunkRef.current, ...next]
         }
         return
       }
-
     })
 
     return () => {

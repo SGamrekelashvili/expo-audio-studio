@@ -1,9 +1,10 @@
 package expo.modules.audiostudio
 
+import android.util.Base64
 import expo.modules.kotlin.sharedobjects.SharedObject
 import expo.modules.kotlin.AppContext
 import android.util.Log
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
@@ -12,19 +13,19 @@ class AudioChunkManager(appContext: AppContext) : SharedObject(appContext) {
         private const val TAG = "AudioChunkManager"
         private const val MAX_BUFFER_SIZE = 8192
         private const val VAD_SILENCE_THRESHOLD_MS = 300
+        private const val BATCH_MAX_BYTES = 32768
     }
-    
-    private val chunkQueue = ConcurrentLinkedQueue<AudioChunk>()
+
+    private val accumulatorLock = Any()
+    private val accumulator = ByteArrayOutputStream(BATCH_MAX_BYTES)
+    private var oldestTimestamp = 0L
+    private var latestTimestamp = 0L
+    private var accumulatorHasVoice = false
+
     private val isStreaming = AtomicBoolean(false)
     private val lastVoiceDetectedTime = AtomicLong(0L)
     private val isVoiceActive = AtomicBoolean(false)
-    
-    data class AudioChunk(
-        val data: ByteArray,
-        val timestamp: Long,
-        val hasVoice: Boolean
-    )
-    
+
     fun processChunk(audioData: ByteArray, hasVoice: Boolean) {
         if (!isStreaming.get()) return
 
@@ -40,65 +41,66 @@ class AudioChunkManager(appContext: AppContext) : SharedObject(appContext) {
         }
 
         if (isVoiceActive.get()) {
-            val chunkToQueue = if (audioData.size > MAX_BUFFER_SIZE) {
-                Log.w(TAG, "Chunk too large: ${audioData.size}, truncating to $MAX_BUFFER_SIZE")
-                audioData.sliceArray(0 until MAX_BUFFER_SIZE)
+            val data = if (audioData.size > MAX_BUFFER_SIZE) {
+                audioData.copyOfRange(0, MAX_BUFFER_SIZE)
             } else {
                 audioData
             }
 
-            chunkQueue.offer(AudioChunk(chunkToQueue, now, hasVoice))
-
-            while (chunkQueue.size > 10) {
-                chunkQueue.poll() // Remove oldest
+            synchronized(accumulatorLock) {
+                if (accumulator.size() == 0) {
+                    oldestTimestamp = now
+                }
+                accumulator.write(data)
+                latestTimestamp = now
+                if (hasVoice) accumulatorHasVoice = true
             }
-        } else {
-            Log.d(TAG, "Skipping chunk - no voice detected for ${now - lastVoiceDetectedTime.get()}ms")
         }
     }
 
-    fun getNextChunk(): Map<String, Any>? {
-        val chunk = chunkQueue.poll() ?: return null
+    /**
+     * Drains accumulated audio data into a single batch map using Base64 encoding
+     * to avoid per-byte boxing overhead.
+     */
+    fun drainBatch(): Map<String, Any>? {
+        synchronized(accumulatorLock) {
+            if (accumulator.size() == 0) return null
 
-        val intArray = chunk.data.map { it.toInt() and 0xFF }
+            val bytes = accumulator.toByteArray()
+            val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            val result = mapOf<String, Any>(
+                "data" to encoded,
+                "timestamp" to oldestTimestamp,
+                "endTimestamp" to latestTimestamp,
+                "hasVoice" to accumulatorHasVoice,
+                "size" to bytes.size,
+                "encoding" to "base64"
+            )
 
-        return mapOf(
-            "data" to intArray,
-            "timestamp" to chunk.timestamp,
-            "hasVoice" to chunk.hasVoice,
-            "size" to chunk.data.size
-        )
-    }
-
-    fun getAllChunks(): List<Map<String, Any>> {
-        val chunks = mutableListOf<Map<String, Any>>()
-        while (chunks.size < 10) {
-            val chunk = getNextChunk() ?: break
-            chunks.add(chunk)
+            accumulator.reset()
+            accumulatorHasVoice = false
+            return result
         }
-        return chunks
     }
 
     fun startStreaming() {
         isStreaming.set(true)
-        chunkQueue.clear()
+        synchronized(accumulatorLock) { accumulator.reset() }
         lastVoiceDetectedTime.set(System.currentTimeMillis())
         isVoiceActive.set(false)
         Log.d(TAG, "Started streaming")
     }
-    
+
     fun stopStreaming() {
         isStreaming.set(false)
-        chunkQueue.clear()
+        synchronized(accumulatorLock) { accumulator.reset() }
         isVoiceActive.set(false)
         Log.d(TAG, "Stopped streaming")
     }
-    
+
     fun isCurrentlyStreaming(): Boolean = isStreaming.get()
-    
-    fun getPendingChunkCount(): Int = chunkQueue.size
-    
+
     fun clearBuffer() {
-        chunkQueue.clear()
+        synchronized(accumulatorLock) { accumulator.reset() }
     }
 }
