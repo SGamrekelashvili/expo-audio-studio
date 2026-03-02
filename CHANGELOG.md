@@ -1,3 +1,35 @@
+# [2.0.0-rc.1](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.3.0...v2.0.0-rc.1) (2026-03-02)
+
+
+### Bug Fixes
+
+* **ios:** changes that may hit memory ([7deb44e](https://github.com/SGamrekelashvili/expo-audio-studio/commit/7deb44ef0117cc9d667a614dfae6216223432c42))
+* **ios:** compile error ([799f533](https://github.com/SGamrekelashvili/expo-audio-studio/commit/799f53362239870683a82617756c9f74a4962eba))
+* **ios:** improve thread safety and prevent memory leaks in audio module ([6d9fc26](https://github.com/SGamrekelashvili/expo-audio-studio/commit/6d9fc2685c9517cac21c717d813736df63bf76e0))
+* **ios:** silence drop of audio recording when using VAD ([41b5755](https://github.com/SGamrekelashvili/expo-audio-studio/commit/41b57559f6937a15e5d6ba5b1ccd891d60a57db2))
+* **recording:** make stopRecording async to ensure file is ready before use ([44bd766](https://github.com/SGamrekelashvili/expo-audio-studio/commit/44bd766d2f414ef1ae60681665404b6a4776430f))
+* revert async stopRecording changes for stability ([770f4c6](https://github.com/SGamrekelashvili/expo-audio-studio/commit/770f4c62216df0fafca6cb35a27e0f03f96ec39f))
+
+
+### Features
+
+* convert base64 chunks to PCM & memory leaks ([d6b895d](https://github.com/SGamrekelashvili/expo-audio-studio/commit/d6b895dece522ab9bd366c76b103d2b8c9f42a40))
+* **ios:** add recording error details and fix threading issues ([f9acc81](https://github.com/SGamrekelashvili/expo-audio-studio/commit/f9acc8159861462b1a9b688a41735138ab8220f6))
+* trigger beta release ([74cce61](https://github.com/SGamrekelashvili/expo-audio-studio/commit/74cce61b74827485fb980b60ca116df304c27c24))
+
+
+### BREAKING CHANGES
+
+* **recording:** stopRecording() now returns Promise<string> instead of string
+
+- iOS: Wait for AVAudioRecorder delegate before resolving Promise
+- Android: Convert to AsyncFunction for API consistency
+- Add 0.3s delay before VAD starts to prevent audio session conflict
+- Fix first recording corruption when VAD is enabled
+- Update TypeScript types and README examples
+
+Migration: Change stopRecording() calls to await stopRecording()
+
 # [2.0.0-beta.1](https://github.com/SGamrekelashvili/expo-audio-studio/compare/v1.4.0-beta.5...v2.0.0-beta.1) (2025-12-19)
 
 
